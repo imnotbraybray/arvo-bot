@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Server Selection - {{ ARVO_BOT_NAME }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Dark Charcoal */
+            color: #e2e8f0; /* Light Gray */
+            display: flex;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .sidebar {
+            width: 260px;
+            background-color: #23272a; /* Slightly Lighter Charcoal */
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            color: #a0aec0; /* Medium Gray */
+        }
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        .sidebar-logo {
+            height: 40px;
+            width: 40px;
+            margin-right: 0.75rem;
+            border-radius: 50%;
+        }
+        .sidebar-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #ffffff;
+        }
+        .sidebar-nav a {
+            display: block;
+            padding: 0.75rem 1rem;
+            border-radius: 0.375rem;
+            color: #a0aec0;
+            text-decoration: none;
+            margin-bottom: 0.5rem;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        .sidebar-nav a.active, .sidebar-nav a:hover {
+            background-color: #4a5568; /* Medium Gray */
+            color: #ffffff;
+        }
+        .sidebar-footer {
+            margin-top: auto;
+            padding-top: 1rem;
+            border-top: 1px solid #4a5568;
+        }
+        .sidebar-footer .user-info {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        .sidebar-footer .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            margin-right: 0.75rem;
+        }
+        .main-content {
+            flex-grow: 1;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+        .server-card {
+            background-color: #2d3748; /* Card Background */
+            border-radius: 0.5rem;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            text-decoration: none;
+            color: #e2e8f0;
+        }
+        .server-card:hover:not(.disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2), 0 4px 6px -2px rgba(0,0,0,0.1);
+        }
+        .server-card.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background-color: #252a33;
+        }
+        .server-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            margin-right: 1rem;
+            background-color: #4a5568; /* Placeholder if no icon */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.25rem;
+        }
+        .server-icon img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .server-name {
+            font-weight: 600;
+            font-size: 1.125rem;
+        }
+        .server-perms {
+            font-size: 0.875rem;
+            color: #a0aec0;
+        }
+        .invite-card {
+            border-style: dashed;
+            border-width: 2px;
+            border-color: #4a5568;
+        }
+        .invite-card:hover {
+            border-color: #f6e05e; /* Gold */
+        }
+        .text-gold { color: #f6e05e; }
+        .btn-refresh {
+            background-color: #4299e1; /* Blue */
+            color: white;
+            transition: background-color 0.3s ease;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+        }
+        .btn-refresh:hover {
+            background-color: #2b6cb0; /* Darker blue */
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <img src="{{ url_for('static', filename='images/arvo_logo.png') }}" alt="{{ ARVO_BOT_NAME }} Logo" class="sidebar-logo">
+            <h1 class="sidebar-title">{{ ARVO_BOT_NAME }}</h1>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="{{ url_for('dashboard_servers') }}" class="active"> <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18M4 6h16M4 18h16"></path></svg>
+                Servers
+            </a>
+            <a href="#" class="opacity-50 cursor-not-allowed"> <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7.014A8.003 8.003 0 0122 12c0 3-1 7-6.343 6.657z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"></path></svg>
+                Whitelabel (Soon™)
+            </a>
+             <a href="{{ url_for('index') }}"> <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                Main Site
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            {% if session.discord_username %}
+            <div class="user-info">
+                {% if session.discord_avatar_url %}
+                <img src="{{ session.discord_avatar_url }}" alt="User Avatar" class="user-avatar">
+                {% endif %}
+                <span>{{ session.discord_username }}</span>
+            </div>
+            <a href="{{ url_for('logout') }}" class="block text-center py-2 px-4 rounded-md bg-red-600 hover:bg-red-700 text-white text-sm">Logout</a>
+            {% else %}
+            <p>Not logged in.</p>
+            <a href="{{ url_for('login') }}?next={{ request.url }}" class="block text-center py-2 px-4 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-sm">Login with Discord</a>
+            {% endif %}
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Servers</h1>
+            <a href="{{ url_for('dashboard_servers') }}" class="btn-refresh">
+                <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m-15.357-2a8.001 8.001 0 0015.357 2M9 15h4.582"></path></svg>
+                Refresh List
+            </a>
+        </div>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold text-gold mb-4">Your Servers</h2>
+            <p class="text-gray-400 mb-4">Servers where you have 'Manage Server' permissions and {{ ARVO_BOT_NAME }} is present.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <a href="https://discord.com/oauth2/authorize?client_id={{ DISCORD_CLIENT_ID_BOT }}&scope=bot%20applications.commands&permissions=8" target="_blank" class="server-card invite-card flex-col justify-center items-center text-center p-6">
+                    <div class="text-4xl mb-2">+</div>
+                    <span class="font-semibold">Invite {{ ARVO_BOT_NAME }} to your server</span>
+                </a>
+                {% if manageable_servers %}
+                    {% for server in manageable_servers %}
+                    <a href="{{ url_for('dashboard_guild', guild_id=server.id) }}" class="server-card"> {% if server.icon_url %}
+                            <img src="{{ server.icon_url }}" alt="{{ server.name }} Icon" class="server-icon">
+                        {% else %}
+                            <div class="server-icon"><span>{{ server.name[0] if server.name else '?' }}</span></div>
+                        {% endif %}
+                        <div>
+                            <div class="server-name">{{ server.name }}</div>
+                            <div class="server-perms text-green-400">Manageable</div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-gray-400 md:col-span-2 lg:col-span-3">No servers found where you have 'Manage Server' permissions and {{ ARVO_BOT_NAME }} is a member.</p>
+                {% endif %}
+            </div>
+        </section>
+
+        <section>
+            <h2 class="text-2xl font-semibold text-gold mb-4">Other Servers</h2>
+            <p class="text-gray-400 mb-4">Servers where {{ ARVO_BOT_NAME }} is present, but you do not have 'Manage Server' permissions.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% if other_servers_with_bot %}
+                    {% for server in other_servers_with_bot %}
+                    <div class="server-card disabled">
+                        {% if server.icon_url %}
+                            <img src="{{ server.icon_url }}" alt="{{ server.name }} Icon" class="server-icon">
+                        {% else %}
+                            <div class="server-icon"><span>{{ server.name[0] if server.name else '?' }}</span></div>
+                        {% endif %}
+                        <div>
+                            <div class="server-name">{{ server.name }}</div>
+                            <div class="server-perms">No permission <span title="You need 'Manage Server' permission in this server to configure {{ ARVO_BOT_NAME }}.">ℹ️</span></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                     <p class="text-gray-400 md:col-span-2 lg:col-span-3">No other servers found with {{ ARVO_BOT_NAME }} where you lack 'Manage Server' permissions.</p>
+                {% endif %}
+                 {% if not manageable_servers and not other_servers_with_bot %}
+                    <p class="text-gray-400 md:col-span-2 lg:col-span-3">It seems {{ ARVO_BOT_NAME }} isn't in any servers you're currently in, or we couldn't fetch the list. Try inviting it or refreshing!</p>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+</body>
+</html>
