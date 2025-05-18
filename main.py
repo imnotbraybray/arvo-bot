@@ -428,15 +428,21 @@ async def infract_mute(interaction: Interaction, member: Member, duration_str: s
 
     delta = None
     duration_seconds = 0
-    unit = duration_str[-1].lower()
-    value = int(duration_str[:-1])
+    
+    try: # Added try-except for parsing duration_str
+        unit = duration_str[-1].lower()
+        value = int(duration_str[:-1])
+    except (IndexError, ValueError):
+        await interaction.response.send_message("Invalid duration format. Ensure it's a number followed by m, h, d, or w (e.g., 30m).", ephemeral=True)
+        return
+
 
     if unit == 'm': delta = datetime.timedelta(minutes=value); duration_seconds = value * 60
     elif unit == 'h': delta = datetime.timedelta(hours=value); duration_seconds = value * 3600
     elif unit == 'd': delta = datetime.timedelta(days=value); duration_seconds = value * 86400
     elif unit == 'w': delta = datetime.timedelta(weeks=value); duration_seconds = value * 604800
     else:
-        await interaction.response.send_message("Invalid duration format. Use 'm' for minutes, 'h' for hours, 'd' for days, 'w' for weeks (e.g., 30m, 2h, 7d).", ephemeral=True)
+        await interaction.response.send_message("Invalid duration unit. Use 'm' for minutes, 'h' for hours, 'd' for days, 'w' for weeks (e.g., 30m, 2h, 7d).", ephemeral=True)
         return
 
     if duration_seconds <= 0 or duration_seconds > 28 * 86400: # Max 28 days
@@ -681,7 +687,7 @@ async def togglecommand_autocomplete(interaction: Interaction, current: str) -> 
 # --- Bot Events ---
 @bot.event
 async def on_ready():
-    print(fLogged in as {bot.user.name} (ID: {bot.user.id})")
+    print(f"Logged in as {bot.user.name} (ID: {bot.user.id})") # Corrected this line
     print(f"discord.py version: {discord.__version__}")
     print(f"ArvoBot is in {len(bot.guilds)} guilds.")
     print("------")
