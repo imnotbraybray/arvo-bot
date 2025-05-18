@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arvo - Smart Staff Management Discord Bot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Dark blue/charcoal base */
+            color: #e2e8f0; /* Light gray text */
+        }
+        .hero-bg {
+            background-color: #2d3748; /* Slightly lighter dark blue */
+        }
+        .feature-card, .team-card {
+            background-color: #2d3748; /* Card background */
+            border-left: 4px solid #f6e05e; /* Gold accent */
+        }
+        .btn-primary {
+            background-color: #f6e05e; /* Gold */
+            color: #1a202c; /* Dark text for contrast on gold */
+            transition: background-color 0.3s ease;
+        }
+        .btn-primary:hover {
+            background-color: #ecc94b; /* Darker gold on hover */
+        }
+        .btn-secondary {
+            background-color: #4a5568; /* Medium gray */
+            color: #e2e8f0;
+            transition: background-color 0.3s ease;
+        }
+        .btn-secondary:hover {
+            background-color: #2d3748;
+        }
+        .text-gold {
+            color: #f6e05e; /* Gold accent text */
+        }
+        .section-title-underline {
+            display: inline-block;
+            border-bottom: 3px solid #f6e05e;
+            padding-bottom: 0.25rem;
+        }
+        nav a:hover {
+            color: #f6e05e;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <nav class="bg-gray-900 p-4 sticky top-0 z-50 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center">
+                <img src="{{ url_for('static', filename='images/arvo_logo.png') }}" alt="Arvo Logo" class="h-10 w-10 mr-3 rounded-full">
+                <span class="text-2xl font-bold text-white">Arvo</span>
+            </div>
+            <div>
+                <a href="#features" class="text-gray-300 hover:text-gold px-3 py-2 rounded-md text-sm font-medium">Features</a>
+                <a href="{{ url_for('static_page', page_name='docs_placeholder') }}" class="text-gray-300 hover:text-gold px-3 py-2 rounded-md text-sm font-medium">Docs</a>
+                <a href="https://discord.gg/xr7NjKQjDy" target="_blank" class="text-gray-300 hover:text-gold px-3 py-2 rounded-md text-sm font-medium">Support</a>
+                </div>
+        </div>
+    </nav>
+
+    <section class="hero-bg py-20 md:py-32">
+        <div class="container mx-auto text-center px-6">
+            <img src="{{ url_for('static', filename='images/arvo_logo.png') }}" alt="Arvo Logo" class="w-32 h-32 mx-auto mb-8 rounded-full shadow-xl">
+            <h1 class="text-4xl md:text-6xl font-extrabold mb-4">
+                Envision <span class="text-gold">Arvo</span>
+            </h1>
+            <p class="text-xl md:text-2xl text-gray-300 mb-6 max-w-3xl mx-auto">
+                Where Smart Staff Management Becomes Effortless.
+            </p>
+            <p class="text-lg text-gray-400 mb-10 max-w-2xl mx-auto">
+                Arvo – Smart Staff Management 🦉 Keep your server organized with automated moderation, role management, and staff coordination—all in one reliable bot.
+            </p>
+            <div class="flex justify-center space-x-4">
+                <a href="https://discord.com/oauth2/authorize?client_id=790618606069088277" target="_blank" class="btn-primary font-semibold py-3 px-8 rounded-lg text-lg shadow-md">
+                    Add Arvo to Discord
+                </a>
+                <a href="https://discord.gg/xr7NjKQjDy" target="_blank" class="btn-secondary font-semibold py-3 px-8 rounded-lg text-lg shadow-md">
+                    Join Support Server
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <section id="features" class="py-16 md:py-24 bg-gray-800">
+        <div class="container mx-auto px-6">
+            <h2 class="text-3xl md:text-4xl font-bold text-center mb-4">Why Choose <span class="text-gold">Arvo</span>?</h2>
+            <p class="text-center text-gray-400 mb-12 md:mb-16 max-w-2xl mx-auto">Discover the powerful features that make Arvo the ultimate staff management solution for your Discord server.</p>
+            
+            <div class="grid md:grid-cols-2 gap-8 lg:gap-12 items-start">
+                <div class="feature-card p-6 rounded-lg shadow-lg">
+                    <div class="flex items-center mb-4">
+                        <img src="{{ url_for('static', filename='images/staffmanageexample.png') }}" alt="Staff Management Icon" class="w-24 h-24 mr-6 rounded-md object-cover">
+                        <div>
+                           <h3 class="text-2xl font-semibold text-gold mb-2">Comprehensive Staff Management</h3>
+                           <p class="text-gray-300">Manage your staff in a way that suits you. With Arvo, you can track staff quota, hire/promote/demote/terminate staff, infract staff, and more!</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="feature-card p-6 rounded-lg shadow-lg">
+                     <div class="flex items-center mb-4">
+                        <img src="{{ url_for('static', filename='images/automodexample.png') }}" alt="Automated Moderation Icon" class="w-24 h-24 mr-6 rounded-md object-cover">
+                        <div>
+                            <h3 class="text-2xl font-semibold text-gold mb-2">Intelligent Automated Moderation</h3>
+                            <p class="text-gray-300">Let Arvo handle routine moderation. Configure automated actions for infractions, filter content, and set up scheduled reminders or tasks for your staff, ensuring a consistently well-maintained server.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="feature-card p-6 rounded-lg shadow-lg">
+                    <div class="flex items-center mb-4">
+                        <img src="{{ url_for('static', filename='images/rolemanageexample.png') }}" alt="Role Management Icon" class="w-24 h-24 mr-6 rounded-md object-cover">
+                        <div>
+                            <h3 class="text-2xl font-semibold text-gold mb-2">Advanced Role Management</h3>
+                            <p class="text-gray-300">Simplify complex role setups. Arvo offers intuitive tools for reaction roles, auto-roles on join, and dynamic role-based command access configured easily via <code>/setup</code>.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="feature-card p-6 rounded-lg shadow-lg">
+                     <div class="flex items-center mb-4">
+                        <img src="{{ url_for('static', filename='images/staffcoordexample.png') }}" alt="Staff Coordination Icon" class="w-24 h-24 mr-6 rounded-md object-cover">
+                        <div>
+                            <h3 class="text-2xl font-semibold text-gold mb-2">Seamless Staff Coordination</h3>
+                            <p class="text-gray-300">Keep your team synchronized. Arvo facilitates internal communication with dedicated log channels, staff-only announcements, and tools to track activity and assign responsibilities efficiently.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="team" class="py-16 md:py-24">
+        <div class="container mx-auto px-6 text-center">
+            <h2 class="text-3xl md:text-4xl font-bold mb-4"><span class="section-title-underline">Meet the Team</span></h2>
+            <p class="text-gray-400 mb-12 md:mb-16 max-w-xl mx-auto">The minds behind Arvo, dedicated to improving your server management experience.</p>
+            <div class="flex flex-wrap justify-center gap-8 md:gap-12">
+                <div class="team-card p-6 rounded-lg shadow-lg w-full sm:w-1/2 md:w-1/3 lg:w-1/4 text-center">
+                    <img src="{{ url_for('static', filename='images/jack_pfp.png') }}" alt="Jack - Founder" class="w-32 h-32 rounded-full mx-auto mb-4 border-4 border-gold">
+                    <h3 class="text-xl font-semibold text-gold">Jack</h3>
+                    <p class="text-gray-400">Founder & Lead Developer</p>
+                </div>
+                <div class="team-card p-6 rounded-lg shadow-lg w-full sm:w-1/2 md:w-1/3 lg:w-1/4 text-center">
+                    <img src="{{ url_for('static', filename='images/braden_pfp.png') }}" alt="Braden - Co-Founder" class="w-32 h-32 rounded-full mx-auto mb-4 border-4 border-gold">
+                    <h3 class="text-xl font-semibold text-gold">Braden</h3>
+                    <p class="text-gray-400">Co-Founder & Operations</p>
+                </div>
+                </div>
+        </div>
+    </section>
+    
+    <section class="hero-bg py-16 md:py-24">
+        <div class="container mx-auto text-center px-6">
+            <h2 class="text-3xl md:text-4xl font-bold mb-6">Ready to Elevate Your Staff Management?</h2>
+            <p class="text-lg text-gray-300 mb-8 max-w-xl mx-auto">Join thousands of servers already benefiting from Arvo's smart features. Add Arvo today and experience the difference!</p>
+            <div class="flex justify-center space-x-4">
+                <a href="https://discord.com/oauth2/authorize?client_id=790618606069088277" target="_blank" class="btn-primary font-semibold py-3 px-8 rounded-lg text-lg shadow-md">
+                    Invite Arvo Now
+                </a>
+                <a href="https://discord.gg/xr7NjKQjDy" target="_blank" class="btn-secondary font-semibold py-3 px-8 rounded-lg text-lg shadow-md">
+                    Get Support
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <footer class="bg-gray-900 text-gray-400 py-12">
+        <div class="container mx-auto px-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div>
+                    <div class="flex items-center mb-4">
+                         <img src="{{ url_for('static', filename='images/arvo_logo.png') }}" alt="Arvo Logo" class="h-8 w-8 mr-2 rounded-full">
+                         <h3 class="text-xl font-semibold text-white">Arvo Bot</h3>
+                    </div>
+                    <p class="text-sm">Smart Staff Management for Discord. <br>Organized, automated, and reliable.</p>
+                </div>
+                <div>
+                    <h4 class="text-lg font-semibold text-white mb-4">Quick Links</h4>
+                    <ul class="space-y-2">
+                        <li><a href="#features" class="hover:text-gold">Features</a></li>
+                        <li><a href="{{ url_for('static_page', page_name='docs_placeholder') }}" class="hover:text-gold">Documentation</a></li>
+                        <li><a href="https://discord.gg/xr7NjKQjDy" target="_blank" class="hover:text-gold">Support Server</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="text-lg font-semibold text-white mb-4">Legal</h4>
+                    <ul class="space-y-2">
+                        <li><a href="{{ url_for('privacy_policy') }}" class="hover:text-gold">Privacy Policy</a></li>
+                        <li><a href="{{ url_for('terms_and_conditions') }}" class="hover:text-gold">Terms & Conditions</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="mt-8 border-t border-gray-700 pt-8 text-center text-sm">
+                <p>&copy; <span id="currentYear"></span> Arvo Bot. All Rights Reserved.</p>
+                <p>Arvo is not affiliated with Discord Inc.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+    </script>
+</body>
+</html>
