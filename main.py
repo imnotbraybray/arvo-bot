@@ -11,12 +11,18 @@ import asyncio
 ARVO_BOT_NAME = "Arvo"
 ARVO_BOT_DESCRIPTION = "Arvo - Smart Staff Management 🦉 Keep your server organized with automated moderation, role management, and staff coordination—all in one reliable bot."
 
+# --- Configuration (Fetched from Environment Variables) ---
+BOT_TOKEN = os.getenv("DISCORD_TOKEN") 
+FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
+RENDER_EXTERNAL_URL = os.getenv('RENDER_EXTERNAL_URL') # Define globally
+
+if BOT_TOKEN is None:
+    print(f"CRITICAL ({ARVO_BOT_NAME}): DISCORD_TOKEN environment variable not set. Bot cannot start.")
+    exit()
+
 # --- Flask App for Uptime Pinging AND Serving Website ---
 app = Flask(__name__) # '__name__' tells Flask where to look for templates/static files
 
-# This key is NOT for user sessions on the informational site,
-# but Flask still likes to have it set. It would be critical for the dashboard.
-FLASK_SECRET_KEY = os.environ.get('FLASK_SECRET_KEY')
 if FLASK_SECRET_KEY:
     app.secret_key = FLASK_SECRET_KEY
 else:
@@ -27,8 +33,6 @@ else:
 @app.route('/')
 def index():
     """Serves the main landing page (index.html)."""
-    # You can pass variables to your template if needed, e.g., bot stats
-    # For now, it's just rendering the static template.
     return render_template('index.html', ARVO_BOT_NAME=ARVO_BOT_NAME)
 
 @app.route('/privacy-policy')
@@ -41,29 +45,22 @@ def terms_and_conditions():
     """Serves the terms and conditions page."""
     return render_template('terms_and_conditions.html', ARVO_BOT_NAME=ARVO_BOT_NAME)
 
-@app.route('/keep-alive') # Renamed the keep-alive route for clarity
+@app.route('/keep-alive') 
 def keep_alive_route():
     """Endpoint for UptimeRobot to ping."""
     return f"{ARVO_BOT_NAME} informational site server is alive!", 200
 
 def run_flask():
   port = int(os.environ.get('PORT', 8080)) 
-  # Use '0.0.0.0' to be accessible externally by Render
-  app.run(host='0.0.0.0', port=port, debug=False) # debug=False for production
+  app.run(host='0.0.0.0', port=port, debug=False) 
 
-def start_keep_alive_server(): # Renamed for clarity
+def start_keep_alive_server(): 
     server_thread = Thread(target=run_flask)
     server_thread.daemon = True
     server_thread.start()
 # --- End Flask App ---
 
 # --- Discord Bot Configuration ---
-BOT_TOKEN = os.getenv("DISCORD_TOKEN") 
-
-if BOT_TOKEN is None:
-    print(f"CRITICAL ({ARVO_BOT_NAME}): DISCORD_TOKEN environment variable not set. Bot cannot start.")
-    exit()
-
 intents = discord.Intents.default()
 intents.members = True 
 intents.message_content = True 
@@ -75,6 +72,11 @@ bot = commands.Bot(command_prefix=commands.when_mentioned_or("!arvo-main-unused!
 async def on_ready():
     print(f'{ARVO_BOT_NAME} has logged in as {bot.user.name} (ID: {bot.user.id})')
     print(f'Discord.py Version: {discord.__version__}')
+    if RENDER_EXTERNAL_URL:
+        print(f"INFO ({ARVO_BOT_NAME}): Website potentially accessible via {RENDER_EXTERNAL_URL}")
+    else:
+        print(f"INFO ({ARVO_BOT_NAME}): RENDER_EXTERNAL_URL is not set. Absolute URLs in templates might not work as expected if used.")
+
     try:
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} application commands for {ARVO_BOT_NAME}.")
@@ -98,12 +100,19 @@ async def arvohelp(interaction: discord.Interaction):
         color=discord.Color.blue() 
     )
     embed.add_field(name="How to Use", value="Use slash commands (e.g., `/setup`, `/ping`) to interact with me.", inline=False)
-    embed.add_field(name="Website", value="Visit [arvobot.xyz](https://arvobot.xyz) for more information!", inline=False) # Update with your actual domain
+    
+    # Use RENDER_EXTERNAL_URL if available for the website link, otherwise use your custom domain directly
+    website_url = RENDER_EXTERNAL_URL if RENDER_EXTERNAL_URL else "https://arvobot.xyz" # Fallback to your custom domain
+    embed.add_field(name="Website", value=f"Visit [{website_url.replace('https://','').replace('http://','')}]( {website_url} ) for more information!", inline=False)
+    
     embed.set_footer(text=f"{ARVO_BOT_NAME} - Your reliable staff management assistant.")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# You would add your /setup command and other Arvo bot specific commands here.
-# For now, this base focuses on getting the website served.
+# Placeholder for /setup command if you add it back to this bot
+# @bot.tree.command(name="setup", description="Configure Arvo for this server.")
+# @app_commands.checks.has_permissions(administrator=True)
+# async def setup(interaction: discord.Interaction):
+#     await interaction.response.send_message("Setup command coming soon to this bot version!", ephemeral=True)
 
 # --- Global Application Command Error Handler ---
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -121,21 +130,22 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             await response_method(error_message_to_user, ephemeral=True)
         else: 
             await interaction.followup.send(error_message_to_user, ephemeral=True)
-    except: pass # Best effort
+    except: pass 
 bot.tree.on_error = on_app_command_error
 
 # --- Running the Bot and Keep-Alive/Website Server ---
 async def main_async():
     async with bot:
-        start_keep_alive_server() # Start the Flask server thread
+        start_keep_alive_server() 
         print(f"Flask web server (for website & keep-alive) thread started for {ARVO_BOT_NAME}.")
         print(f"Attempting to connect {ARVO_BOT_NAME} to Discord...")
         await bot.start(BOT_TOKEN)
 
 if __name__ == "__main__":
-    # Ensure RENDER_EXTERNAL_URL is available for template linking if needed, though not strictly for rendering.
+    # This check is now less critical here as RENDER_EXTERNAL_URL is defined globally
+    # but it's good for awareness if you were to use it for constructing absolute URLs in templates.
     if not RENDER_EXTERNAL_URL:
-        print(f"INFO ({ARVO_BOT_NAME}): RENDER_EXTERNAL_URL is not set. If your templates use absolute URLs based on it, they might not work as expected locally.")
+        print(f"INFO ({ARVO_BOT_NAME}): RENDER_EXTERNAL_URL environment variable is not set by the platform. Web features relying on it might behave unexpectedly.")
     
     try:
         asyncio.run(main_async())
