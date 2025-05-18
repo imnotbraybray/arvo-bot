@@ -1,5 +1,4 @@
-    discord.py>=2.3.0
-    Flask>=2.0.0
-    requests>=2.25.0
-    # Add other dependencies as you build more features
-    
+discord.py>=2.3.0
+Flask>=2.0.0
+requests>=2.25.0
+# Add any other specific dependencies if your bot commands require them
