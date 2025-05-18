@@ -147,13 +147,16 @@
             <h1 class="sidebar-title">{{ ARVO_BOT_NAME }}</h1>
         </div>
         <nav class="sidebar-nav">
-            <a href="{{ url_for('dashboard_servers') }}" class="active"> <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18M4 6h16M4 18h16"></path></svg>
+            <a href="{{ url_for('dashboard_servers') }}" class="active"> 
+                <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18M4 6h16M4 18h16"></path></svg>
                 Servers
             </a>
-            <a href="#" class="opacity-50 cursor-not-allowed"> <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7.014A8.003 8.003 0 0122 12c0 3-1 7-6.343 6.657z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"></path></svg>
+            <a href="#" class="opacity-50 cursor-not-allowed"> 
+                <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7.014A8.003 8.003 0 0122 12c0 3-1 7-6.343 6.657z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"></path></svg>
                 Whitelabel (Soon™)
             </a>
-             <a href="{{ url_for('index') }}"> <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+             <a href="{{ url_for('index') }}"> 
+                <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
                 Main Site
             </a>
         </nav>
@@ -192,7 +195,8 @@
                 </a>
                 {% if manageable_servers %}
                     {% for server in manageable_servers %}
-                    <a href="{{ url_for('dashboard_guild', guild_id=server.id) }}" class="server-card"> {% if server.icon_url %}
+                    <a href="{{ url_for('dashboard_guild', guild_id_str=server.id) }}" class="server-card"> 
+                        {% if server.icon_url %}
                             <img src="{{ server.icon_url }}" alt="{{ server.name }} Icon" class="server-icon">
                         {% else %}
                             <div class="server-icon"><span>{{ server.name[0] if server.name else '?' }}</span></div>
