@@ -307,7 +307,7 @@ class ArvoBot(commands.Bot):
 intents = discord.Intents.default()
 intents.guilds = True
 intents.members = True
-intents.message_content = False # Slash commands don't need it
+intents.message_content = True # Slash commands don't need it
 bot = ArvoBot(command_prefix=commands.when_mentioned_or("!arvo "), intents=intents)
 
 # --- Helper: Permission Check Decorators ---
