@@ -35,6 +35,14 @@
         .btn-secondary:hover {
             background-color: #2d3748;
         }
+        .btn-dashboard { /* New style for dashboard button */
+            background-color: #4299e1; /* Blue */
+            color: white;
+            transition: background-color 0.3s ease;
+        }
+        .btn-dashboard:hover {
+            background-color: #2b6cb0; /* Darker blue */
+        }
         .text-gold {
             color: #f6e05e; /* Gold accent text */
         }
@@ -60,6 +68,7 @@
                 <a href="#features" class="text-gray-300 hover:text-gold px-3 py-2 rounded-md text-sm font-medium">Features</a>
                 <a href="https://docs.arvobot.xyz/" target="_blank" class="text-gray-300 hover:text-gold px-3 py-2 rounded-md text-sm font-medium">Docs</a>
                 <a href="https://discord.gg/xr7NjKQjDy" target="_blank" class="text-gray-300 hover:text-gold px-3 py-2 rounded-md text-sm font-medium">Support</a>
+                <a href="{{ url_for('dashboard_servers') }}" class="btn-dashboard ml-2 px-4 py-2 rounded-md text-sm font-semibold">Dashboard</a>
             </div>
         </div>
     </nav>
@@ -102,7 +111,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="feature-card p-6 rounded-lg shadow-lg">
                      <div class="flex items-center mb-4">
                         <img src="{{ url_for('static', filename='images/automodexample.png') }}" alt="Automated Moderation Icon" class="w-24 h-24 mr-6 rounded-md object-cover">
@@ -112,7 +120,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="feature-card p-6 rounded-lg shadow-lg">
                     <div class="flex items-center mb-4">
                         <img src="{{ url_for('static', filename='images/rolemanageexample.png') }}" alt="Role Management Icon" class="w-24 h-24 mr-6 rounded-md object-cover">
@@ -122,7 +129,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="feature-card p-6 rounded-lg shadow-lg">
                      <div class="flex items-center mb-4">
                         <img src="{{ url_for('static', filename='images/staffcoordexample.png') }}" alt="Staff Coordination Icon" class="w-24 h-24 mr-6 rounded-md object-cover">
