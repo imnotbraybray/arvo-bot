@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - {{ guild_name }} - {{ ARVO_BOT_NAME }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #1a202c; color: #e2e8f0; display: flex; min-height: 100vh; margin: 0; }
+        .sidebar { width: 260px; background-color: #23272a; padding: 1.5rem; display: flex; flex-direction: column; color: #a0aec0; }
+        .sidebar-header { display: flex; align-items: center; margin-bottom: 2rem; }
+        .sidebar-logo { height: 40px; width: 40px; margin-right: 0.75rem; border-radius: 50%; }
+        .sidebar-title { font-size: 1.5rem; font-weight: bold; color: #ffffff; }
+        .sidebar-nav a { display: block; padding: 0.75rem 1rem; border-radius: 0.375rem; color: #a0aec0; text-decoration: none; margin-bottom: 0.5rem; transition: background-color 0.2s ease, color 0.2s ease; }
+        .sidebar-nav a.active, .sidebar-nav a:hover { background-color: #4a5568; color: #ffffff; }
+        .sidebar-footer { margin-top: auto; padding-top: 1rem; border-top: 1px solid #4a5568; }
+        .sidebar-footer .user-info { display: flex; align-items: center; margin-bottom: 0.75rem; }
+        .sidebar-footer .user-avatar { width: 32px; height: 32px; border-radius: 50%; margin-right: 0.75rem; }
+        .main-content { flex-grow: 1; padding: 2rem; overflow-y: auto; }
+        .text-gold { color: #f6e05e; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.375rem; font-weight: 500; transition: background-color 0.3s ease; }
+        .btn-primary { background-color: #4299e1; color: white; }
+        .btn-primary:hover { background-color: #2b6cb0; }
+        .btn-success { background-color: #48bb78; color: white; }
+        .btn-success:hover { background-color: #38a169; }
+        .form-section { background-color: #2d3748; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 2rem; }
+        .form-switch { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid #4a5568; }
+        .form-switch:last-child { border-bottom: none; }
+        .switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #4a5568; transition: .4s; border-radius: 28px; }
+        .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #f6e05e; /* Gold for enabled */ }
+        input:focus + .slider { box-shadow: 0 0 1px #f6e05e; }
+        input:checked + .slider:before { transform: translateX(22px); }
+        .category-title { font-size: 1.25rem; font-weight: 600; color: #f6e05e; margin-top: 1.5rem; margin-bottom: 0.75rem; border-bottom: 1px solid #4a5568; padding-bottom: 0.5rem; }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <img src="{{ url_for('static', filename='images/arvo_logo.png') }}" alt="{{ ARVO_BOT_NAME }} Logo" class="sidebar-logo">
+            <h1 class="sidebar-title">{{ ARVO_BOT_NAME }}</h1>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="{{ url_for('dashboard_servers') }}">
+                <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18M4 6h16M4 18h16"></path></svg>
+                Servers
+            </a>
+            <a href="{{ url_for('dashboard_guild', guild_id_str=guild_id) }}" class="active"> <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Manage Server
+            </a>
+             <a href="{{ url_for('index') }}"> 
+                <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                Main Site
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            {% if session.discord_username %}
+            <div class="user-info">
+                {% if session.discord_avatar_url %}
+                <img src="{{ session.discord_avatar_url }}" alt="User Avatar" class="user-avatar">
+                {% endif %}
+                <span>{{ session.discord_username }}</span>
+            </div>
+            <a href="{{ url_for('logout') }}" class="block text-center py-2 px-4 rounded-md bg-red-600 hover:bg-red-700 text-white text-sm">Logout</a>
+            {% else %}
+            <p>Not logged in.</p>
+            <a href="{{ url_for('login') }}?next={{ request.url }}" class="block text-center py-2 px-4 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-sm">Login with Discord</a>
+            {% endif %}
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <h1 class="text-3xl font-bold text-white mb-2">Dashboard: <span class="text-gold">{{ guild_name }}</span></h1>
+        <p class="text-gray-400 mb-8">Manage {{ ARVO_BOT_NAME }}'s settings for this server.</p>
+
+        <section class="form-section">
+            <h2 class="text-2xl font-semibold text-gold mb-4">Command Management</h2>
+            <p class="text-gray-300 mb-6">Enable or disable commands for this server. Users with 'Manage Server' permission can change these settings.</p>
+            
+            <form method="POST" action="{{ url_for('save_command_settings', guild_id_str=guild_id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/> {% for category, cmds in command_categories.items() %}
+                    <h3 class="category-title">{{ category }}</h3>
+                    {% for cmd_name in cmds %}
+                        <div class="form-switch">
+                            <label for="cmd-{{ cmd_name }}" class="text-lg">{{ "/" + cmd_name }}</label>
+                            <label class="switch">
+                                <input type="checkbox" id="cmd-{{ cmd_name }}" name="cmd_{{ cmd_name }}" value="enabled" 
+                                       {% if command_states.get(cmd_name, True) %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    {% endfor %}
+                {% endfor %}
+
+                <div class="mt-8">
+                    <button type="submit" class="btn btn-success">Save Command Settings</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="form-section mt-8">
+            <h2 class="text-2xl font-semibold text-gold mb-4">Log Channel Configuration (Admin Only)</h2>
+            <p class="text-gray-300">Configure log channels for various bot activities. (Coming Soon)</p>
+            </section>
+
+        <section class="form-section mt-8">
+            <h2 class="text-2xl font-semibold text-gold mb-4">Staff Role Configuration (Admin Only)</h2>
+            <p class="text-gray-300">Define which roles are considered 'Staff' or can execute staff-specific commands. (Coming Soon)</p>
+            </section>
+
+        </main>
+</body>
+</html>
