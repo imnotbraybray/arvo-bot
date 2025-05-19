@@ -369,14 +369,14 @@ class HierarchyError(app_commands.CheckFailure):
 
 # --- Permission Check Functions & Decorators ---
 def is_general_staff(interaction: discord.Interaction) -> bool: 
-    if not interaction.guild or not isinstance(interaction.user, discord.Member): return False # Corrected Member
+    if not interaction.guild or not isinstance(interaction.user, discord.Member): return False 
     if interaction.user.guild_permissions.administrator: return True
     config = get_guild_config(interaction.guild_id)
     staff_role_ids = config.get("staff_role_ids", [])
     return any(role.id in staff_role_ids for role in interaction.user.roles)
 
 def is_high_rank_staff(interaction: discord.Interaction) -> bool: 
-    if not interaction.guild or not isinstance(interaction.user, discord.Member): return False # Corrected Member
+    if not interaction.guild or not isinstance(interaction.user, discord.Member): return False 
     if interaction.user.guild_permissions.administrator: return True
     config = get_guild_config(interaction.guild_id)
     high_rank_role_id = config.get("high_rank_staff_role_id")
@@ -403,12 +403,12 @@ def check_command_status_and_permission(permission_level: Optional[str] = "gener
             high_rank_role_id = config.get("high_rank_staff_role_id")
             if not interaction.user.guild_permissions.administrator:
                 if not high_rank_role_id: raise MissingConfiguredRole(command_name_key, "configured High-Rank Staff (or Administrator)")
-                if not isinstance(interaction.user, discord.Member) or not any(role.id == high_rank_role_id for role in interaction.user.roles): # Check if user is Member
+                if not isinstance(interaction.user, discord.Member) or not any(role.id == high_rank_role_id for role in interaction.user.roles): 
                     role_name = "configured High-Rank Staff"; role_obj = interaction.guild.get_role(high_rank_role_id)
                     if role_obj: role_name = role_obj.name
                     raise MissingConfiguredRole(command_name_key, role_name)
         elif permission_level == "admin_only":
-            if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.administrator: # Check if user is Member
+            if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.administrator: 
                 raise MissingConfiguredRole(command_name_key, "Discord Administrator")
         return True
     return app_commands.check(predicate)
@@ -454,13 +454,13 @@ def add_infraction_record(guild_id: int, user_id: int, type: str, reason: str, m
     infractions_data[key].append(infraction_record); save_to_json(infractions_data, INFRACTIONS_FILE)
     return infraction_id
 
-def check_hierarchy(interaction: discord.Interaction, target_member: discord.Member) -> bool: # Corrected Member
+def check_hierarchy(interaction: discord.Interaction, target_member: discord.Member) -> bool: 
     if interaction.user.id == target_member.id: raise HierarchyError("You cannot perform this action on yourself.")
     if not isinstance(interaction.user, discord.Member) : return False 
     if interaction.user.id == interaction.guild.owner_id: return True
     if target_member.id == interaction.guild.owner_id: raise HierarchyError("You cannot perform this action on the server owner.")
     if not interaction.user.guild_permissions.administrator and target_member.guild_permissions.administrator: raise HierarchyError("You cannot perform this action on an administrator if you are not one.")
-    if isinstance(interaction.user, discord.Member) and isinstance(target_member, discord.Member): # Redundant check for target_member, but safe
+    if isinstance(interaction.user, discord.Member) and isinstance(target_member, discord.Member): 
         if interaction.user.top_role <= target_member.top_role: raise HierarchyError("You cannot perform this action on a member with an equal or higher role.")
     return True
 
@@ -525,10 +525,10 @@ async def sync_guild_commands(guild: discord.Guild):
     except Exception as e: print(f"ERROR: Failed to sync commands for guild {guild.name}: {type(e).__name__} - {e}")
 
 # --- Command Groups ---
-arvo_config_group = Group(name="arvo_config", description="Configure Arvo bot for this server.", guild_only=True)
-infract_group = Group(name="infract", description="User infraction management commands.", guild_only=True)
-staffmanage_group = Group(name="staffmanage", description="Staff management commands.", guild_only=True)
-staffinfract_group = Group(name="staffinfract", description="Staff infraction commands.", guild_only=True)
+arvo_config_group = app_commands.Group(name="arvo_config", description="Configure Arvo bot for this server.", guild_only=True) # Corrected Group
+infract_group = app_commands.Group(name="infract", description="User infraction management commands.", guild_only=True) # Corrected Group
+staffmanage_group = app_commands.Group(name="staffmanage", description="Staff management commands.", guild_only=True) # Corrected Group
+staffinfract_group = app_commands.Group(name="staffinfract", description="Staff infraction commands.", guild_only=True) # Corrected Group
 
 # --- Utility Commands ---
 @bot.tree.command(name="ping", description=f"Check {ARVO_BOT_NAME}'s responsiveness.")
@@ -562,7 +562,7 @@ async def arvo_config_setup(interaction: discord.Interaction):
 @infract_group.command(name="warn", description="Warns a user.")
 @check_command_status_and_permission(permission_level="general_staff")
 @app_commands.describe(member="The member to warn.", reason="The reason for the warning.")
-async def infract_warn(interaction: discord.Interaction, member: discord.Member, reason: str): # Corrected Member
+async def infract_warn(interaction: discord.Interaction, member: discord.Member, reason: str): 
     if not interaction.guild: return
     try: check_hierarchy(interaction, member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -585,7 +585,7 @@ async def infract_warn(interaction: discord.Interaction, member: discord.Member,
 @infract_group.command(name="mute", description="Mutes a user for a specified number of hours.")
 @check_command_status_and_permission(permission_level="general_staff")
 @app_commands.describe(member="The member to mute.", hours="Duration in hours (1-672).", reason="The reason for the mute.")
-async def infract_mute(interaction: discord.Interaction, member: discord.Member, hours: app_commands.Range[int, 1, 672], reason: str): # Corrected Member
+async def infract_mute(interaction: discord.Interaction, member: discord.Member, hours: app_commands.Range[int, 1, 672], reason: str): 
     if not interaction.guild: return
     try: check_hierarchy(interaction, member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -613,7 +613,7 @@ async def infract_mute(interaction: discord.Interaction, member: discord.Member,
 @infract_group.command(name="kick", description="Kicks a user from the server.")
 @check_command_status_and_permission(permission_level="general_staff")
 @app_commands.describe(member="The member to kick.", reason="The reason for the kick.")
-async def infract_kick(interaction: discord.Interaction, member: discord.Member, reason: str): # Corrected Member
+async def infract_kick(interaction: discord.Interaction, member: discord.Member, reason: str): 
     if not interaction.guild: return
     try: check_hierarchy(interaction, member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -641,7 +641,7 @@ async def infract_kick(interaction: discord.Interaction, member: discord.Member,
 @infract_group.command(name="ban", description="Bans a user from the server.")
 @check_command_status_and_permission(permission_level="general_staff")
 @app_commands.describe(user="User to ban (ID if not in server).", reason="Reason for ban.", delete_message_days="Days of messages to delete (0-7).")
-async def infract_ban(interaction: discord.Interaction, user: discord.User, reason: str, delete_message_days: app_commands.Range[int, 0, 7] = 0): # Corrected User
+async def infract_ban(interaction: discord.Interaction, user: discord.User, reason: str, delete_message_days: app_commands.Range[int, 0, 7] = 0): 
     if not interaction.guild: return
     target_member = interaction.guild.get_member(user.id)
     if target_member:
@@ -672,7 +672,7 @@ async def infract_ban(interaction: discord.Interaction, user: discord.User, reas
 @staffmanage_group.command(name="promote", description="Promotes a staff member and assigns a new role.")
 @check_command_status_and_permission(permission_level="high_rank_staff")
 @app_commands.describe(staff_member="Staff member to promote.", new_role="New role to assign.", reason="Reason for promotion.")
-async def staffmanage_promote(interaction: discord.Interaction, staff_member: discord.Member, new_role: discord.Role, reason: str): # Corrected Member, Role
+async def staffmanage_promote(interaction: discord.Interaction, staff_member: discord.Member, new_role: discord.Role, reason: str): 
     if not interaction.guild: return
     try: check_hierarchy(interaction, staff_member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -703,7 +703,7 @@ async def staffmanage_promote(interaction: discord.Interaction, staff_member: di
 @staffmanage_group.command(name="demote", description="Demotes a staff member and removes a role.")
 @check_command_status_and_permission(permission_level="high_rank_staff")
 @app_commands.describe(staff_member="Staff member to demote.", role_to_remove="Role to remove.", reason="Reason for demotion.")
-async def staffmanage_demote(interaction: discord.Interaction, staff_member: discord.Member, role_to_remove: discord.Role, reason: str): # Corrected Member, Role
+async def staffmanage_demote(interaction: discord.Interaction, staff_member: discord.Member, role_to_remove: discord.Role, reason: str): 
     if not interaction.guild: return
     try: check_hierarchy(interaction, staff_member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -730,7 +730,7 @@ async def staffmanage_demote(interaction: discord.Interaction, staff_member: dis
 @staffmanage_group.command(name="terminate", description="Logs staff termination. Manual role removal required.")
 @check_command_status_and_permission(permission_level="high_rank_staff")
 @app_commands.describe(staff_member="Staff member being terminated.", reason="Reason for termination.")
-async def staffmanage_terminate(interaction: discord.Interaction, staff_member: discord.Member, reason: str): # Corrected Member
+async def staffmanage_terminate(interaction: discord.Interaction, staff_member: discord.Member, reason: str): 
     if not interaction.guild: return
     try: check_hierarchy(interaction, staff_member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -758,7 +758,7 @@ async def staffmanage_terminate(interaction: discord.Interaction, staff_member: 
 @staffinfract_group.command(name="warning", description="Issues an official warning to a staff member.")
 @check_command_status_and_permission(permission_level="high_rank_staff")
 @app_commands.describe(staff_member="Staff member to warn.", reason="Reason for staff warning.")
-async def staffinfract_warning(interaction: discord.Interaction, staff_member: discord.Member, reason: str): # Corrected Member
+async def staffinfract_warning(interaction: discord.Interaction, staff_member: discord.Member, reason: str): 
     if not interaction.guild: return
     try: check_hierarchy(interaction, staff_member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -785,7 +785,7 @@ async def staffinfract_warning(interaction: discord.Interaction, staff_member: d
 @staffinfract_group.command(name="strike", description="Issues a strike to a staff member.")
 @check_command_status_and_permission(permission_level="high_rank_staff")
 @app_commands.describe(staff_member="Staff member to issue a strike to.", reason="Reason for staff strike.")
-async def staffinfract_strike(interaction: discord.Interaction, staff_member: discord.Member, reason: str): # Corrected Member
+async def staffinfract_strike(interaction: discord.Interaction, staff_member: discord.Member, reason: str): 
     if not interaction.guild: return
     try: check_hierarchy(interaction, staff_member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -813,7 +813,7 @@ async def staffinfract_strike(interaction: discord.Interaction, staff_member: di
 @bot.tree.command(name="viewinfractions", description="Views infractions for a given user.")
 @check_command_status_and_permission(permission_level="general_staff")
 @app_commands.describe(user="The user whose infractions you want to view.")
-async def viewinfractions(interaction: discord.Interaction, user: discord.User): # Corrected User
+async def viewinfractions(interaction: discord.Interaction, user: discord.User): 
     if not interaction.guild_id: return
     user_key = f"{interaction.guild_id}-{user.id}"; user_infractions = infractions_data.get(user_key, [])
     if not user_infractions: await interaction.response.send_message(f"{user.mention} has no recorded infractions.", ephemeral=True); return
@@ -827,7 +827,7 @@ async def viewinfractions(interaction: discord.Interaction, user: discord.User):
         entry = (f"**ID:** `{infr['id']}`\n**Type:** {infr['type'].replace('_', ' ').title()}\n**Reason:** {infr['reason']}\n"
                  f"**Moderator:** {mod_display}\n**Date:** {formatted_ts}\n")
         if infr.get('duration'): entry += f"**Duration:** {infr['duration']}\n"
-        if infr.get('points'): entry += f"**Points:** {infr['points']}\n"; entry += "---\n"
+        if infr.get('points'): entry += f"**Points:** {infr['points']}\n"; entry += "---\n" # Added points to the entry string
         if infr['type'].startswith("staff_"): staff_infractions_text += entry
         else: normal_infractions_text += entry
     if normal_infractions_text:
