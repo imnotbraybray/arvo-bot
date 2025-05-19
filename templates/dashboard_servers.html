@@ -6,75 +6,40 @@
     <title>Dashboard - Server Selection - {{ ARVO_BOT_NAME }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" href="{{ url_for('static', filename='images/arvo_logo.png') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/arvo_logo.png') }}">
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #1a202c; /* Dark Charcoal */
-            color: #e2e8f0; /* Light Gray */
-            display: flex;
-            min-height: 100vh;
+            background-color: #1a202c; 
+            color: #e2e8f0; 
             margin: 0;
         }
-        .sidebar {
-            width: 260px;
-            background-color: #23272a; /* Slightly Lighter Charcoal */
-            padding: 1.5rem;
-            display: flex;
-            flex-direction: column;
-            color: #a0aec0; /* Medium Gray */
-        }
-        .sidebar-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 2rem;
-        }
-        .sidebar-logo {
-            height: 40px;
-            width: 40px;
-            margin-right: 0.75rem;
-            border-radius: 50%;
-        }
-        .sidebar-title {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: #ffffff;
-        }
-        .sidebar-nav a {
-            display: block;
-            padding: 0.75rem 1rem;
+        .text-gold { color: #f6e05e; }
+        .btn-refresh {
+            background-color: #4299e1; 
+            color: white;
+            transition: background-color 0.3s ease;
+            padding: 0.5rem 1rem;
             border-radius: 0.375rem;
-            color: #a0aec0;
-            text-decoration: none;
-            margin-bottom: 0.5rem;
-            transition: background-color 0.2s ease, color 0.2s ease;
+            font-weight: 500;
         }
-        .sidebar-nav a.active, .sidebar-nav a:hover {
-            background-color: #4a5568; /* Medium Gray */
-            color: #ffffff;
+        .btn-refresh:hover {
+            background-color: #2b6cb0;
         }
-        .sidebar-footer {
-            margin-top: auto;
-            padding-top: 1rem;
-            border-top: 1px solid #4a5568;
-        }
-        .sidebar-footer .user-info {
-            display: flex;
-            align-items: center;
-            margin-bottom: 0.75rem;
-        }
-        .sidebar-footer .user-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            margin-right: 0.75rem;
-        }
-        .main-content {
-            flex-grow: 1;
-            padding: 2rem;
-            overflow-y: auto;
-        }
+        /* Sidebar specific styles */
+        .sidebar { background-color: #23272a; color: #a0aec0; }
+        .sidebar-header { display: flex; align-items: center; margin-bottom: 2rem; }
+        .sidebar-logo { height: 40px; width: 40px; margin-right: 0.75rem; border-radius: 50%; }
+        .sidebar-title { font-size: 1.5rem; font-weight: bold; color: #ffffff; }
+        .sidebar-nav a { display: block; padding: 0.75rem 1rem; border-radius: 0.375rem; color: #a0aec0; text-decoration: none; margin-bottom: 0.5rem; transition: background-color 0.2s ease, color 0.2s ease; }
+        .sidebar-nav a.active, .sidebar-nav a:hover { background-color: #4a5568; color: #ffffff; }
+        .sidebar-footer { margin-top: auto; padding-top: 1rem; border-top: 1px solid #4a5568; }
+        .sidebar-footer .user-info { display: flex; align-items: center; margin-bottom: 0.75rem; }
+        .sidebar-footer .user-avatar { width: 32px; height: 32px; border-radius: 50%; margin-right: 0.75rem; }
+        
         .server-card {
-            background-color: #2d3748; /* Card Background */
+            background-color: #2d3748; 
             border-radius: 0.5rem;
             padding: 1rem;
             display: flex;
@@ -87,61 +52,56 @@
             transform: translateY(-2px);
             box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2), 0 4px 6px -2px rgba(0,0,0,0.1);
         }
-        .server-card.disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            background-color: #252a33;
-        }
+        .server-card.disabled { opacity: 0.6; cursor: not-allowed; background-color: #252a33; }
         .server-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            margin-right: 1rem;
-            background-color: #4a5568; /* Placeholder if no icon */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 1.25rem;
+            width: 48px; height: 48px; border-radius: 50%; margin-right: 1rem; background-color: #4a5568;
+            display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.25rem;
+            flex-shrink: 0; /* Prevent icon from shrinking */
         }
-        .server-icon img {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            object-fit: cover;
-        }
-        .server-name {
-            font-weight: 600;
-            font-size: 1.125rem;
-        }
-        .server-perms {
-            font-size: 0.875rem;
-            color: #a0aec0;
-        }
-        .invite-card {
-            border-style: dashed;
-            border-width: 2px;
-            border-color: #4a5568;
-        }
-        .invite-card:hover {
-            border-color: #f6e05e; /* Gold */
-        }
-        .text-gold { color: #f6e05e; }
-        .btn-refresh {
-            background-color: #4299e1; /* Blue */
-            color: white;
-            transition: background-color 0.3s ease;
-            padding: 0.5rem 1rem;
-            border-radius: 0.375rem;
-            font-weight: 500;
-        }
-        .btn-refresh:hover {
-            background-color: #2b6cb0; /* Darker blue */
+        .server-icon img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+        .server-name { font-weight: 600; font-size: 1.125rem; word-break: break-word; }
+        .server-perms { font-size: 0.875rem; color: #a0aec0; }
+        .invite-card { border-style: dashed; border-width: 2px; border-color: #4a5568; }
+        .invite-card:hover { border-color: #f6e05e; }
+
+        /* Mobile Menu Button */
+        .mobile-sidebar-button { display: none; } /* Hidden on larger screens */
+        @media (max-width: 767px) { /* md breakpoint */
+            .sidebar {
+                position: fixed; /* Or absolute, depending on desired scroll behavior */
+                top: 0;
+                left: 0;
+                bottom: 0;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease-in-out;
+                z-index: 40; /* Ensure it's above content but below overlay if any */
+                width: 260px; /* Keep original width when open */
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .main-content-area {
+                margin-left: 0; /* Main content takes full width when sidebar is hidden */
+            }
+            .mobile-sidebar-button {
+                display: block; /* Show button on mobile */
+                position: fixed; /* Or absolute, to position it */
+                top: 1rem;
+                left: 1rem;
+                z-index: 50; /* Above sidebar */
+                padding: 0.5rem;
+                background-color: #23272a;
+                border-radius: 0.375rem;
+            }
         }
     </style>
 </head>
-<body>
-    <aside class="sidebar">
+<body class="flex flex-col md:flex-row min-h-screen">
+    <button id="mobile-sidebar-toggler" class="mobile-sidebar-button md:hidden text-white">
+        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+    </button>
+
+    <aside id="sidebar" class="sidebar w-full md:w-64 flex-shrink-0">
         <div class="sidebar-header">
             <img src="{{ url_for('static', filename='images/arvo_logo.png') }}" alt="{{ ARVO_BOT_NAME }} Logo" class="sidebar-logo">
             <h1 class="sidebar-title">{{ ARVO_BOT_NAME }}</h1>
@@ -166,7 +126,7 @@
                 {% if session.discord_avatar_url %}
                 <img src="{{ session.discord_avatar_url }}" alt="User Avatar" class="user-avatar">
                 {% endif %}
-                <span>{{ session.discord_username }}</span>
+                <span class="truncate">{{ session.discord_username }}</span>
             </div>
             <a href="{{ url_for('logout') }}" class="block text-center py-2 px-4 rounded-md bg-red-600 hover:bg-red-700 text-white text-sm">Logout</a>
             {% else %}
@@ -176,22 +136,22 @@
         </div>
     </aside>
 
-    <main class="main-content">
-        <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-bold text-white">Servers</h1>
-            <a href="{{ url_for('dashboard_servers') }}" class="btn-refresh">
+    <main class="main-content-area flex-grow p-4 sm:p-8 overflow-y-auto">
+        <div class="flex flex-col sm:flex-row justify-between items-center mb-8">
+            <h1 class="text-2xl sm:text-3xl font-bold text-white mb-4 sm:mb-0">Servers</h1>
+            <a href="{{ url_for('dashboard_servers') }}" class="btn-refresh self-start sm:self-center">
                 <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m-15.357-2a8.001 8.001 0 0015.357 2M9 15h4.582"></path></svg>
                 Refresh List
             </a>
         </div>
 
         <section class="mb-10">
-            <h2 class="text-2xl font-semibold text-gold mb-4">Your Servers</h2>
-            <p class="text-gray-400 mb-4">Servers where you have 'Manage Server' permissions and {{ ARVO_BOT_NAME }} is present.</p>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <a href="https://discord.com/oauth2/authorize?client_id={{ DISCORD_CLIENT_ID_BOT }}&scope=bot%20applications.commands&permissions=8" target="_blank" class="server-card invite-card flex-col justify-center items-center text-center p-6">
-                    <div class="text-4xl mb-2">+</div>
-                    <span class="font-semibold">Invite {{ ARVO_BOT_NAME }} to your server</span>
+            <h2 class="text-xl sm:text-2xl font-semibold text-gold mb-4">Your Servers</h2>
+            <p class="text-gray-400 mb-4 text-sm sm:text-base">Servers where you have 'Manage Server' permissions and {{ ARVO_BOT_NAME }} is present.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                <a href="https://discord.com/oauth2/authorize?client_id={{ DISCORD_CLIENT_ID_BOT if DISCORD_CLIENT_ID_BOT else 'YOUR_BOT_CLIENT_ID' }}&scope=bot%20applications.commands&permissions=8" target="_blank" class="server-card invite-card flex-col justify-center items-center text-center p-6 min-h-[120px]">
+                    <div class="text-3xl sm:text-4xl mb-2">+</div>
+                    <span class="font-semibold text-sm sm:text-base">Invite {{ ARVO_BOT_NAME }}</span>
                 </a>
                 {% if manageable_servers %}
                     {% for server in manageable_servers %}
@@ -208,15 +168,15 @@
                     </a>
                     {% endfor %}
                 {% else %}
-                    <p class="text-gray-400 md:col-span-2 lg:col-span-3">No servers found where you have 'Manage Server' permissions and {{ ARVO_BOT_NAME }} is a member.</p>
+                    <p class="text-gray-400 md:col-span-2 lg:col-span-3 text-sm sm:text-base">No servers found where you can manage {{ ARVO_BOT_NAME }}.</p>
                 {% endif %}
             </div>
         </section>
 
         <section>
-            <h2 class="text-2xl font-semibold text-gold mb-4">Other Servers</h2>
-            <p class="text-gray-400 mb-4">Servers where {{ ARVO_BOT_NAME }} is present, but you do not have 'Manage Server' permissions.</p>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <h2 class="text-xl sm:text-2xl font-semibold text-gold mb-4">Other Servers</h2>
+            <p class="text-gray-400 mb-4 text-sm sm:text-base">Servers where {{ ARVO_BOT_NAME }} is present, but you do not have 'Manage Server' permissions.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {% if other_servers_with_bot %}
                     {% for server in other_servers_with_bot %}
                     <div class="server-card disabled">
@@ -232,13 +192,29 @@
                     </div>
                     {% endfor %}
                 {% else %}
-                     <p class="text-gray-400 md:col-span-2 lg:col-span-3">No other servers found with {{ ARVO_BOT_NAME }} where you lack 'Manage Server' permissions.</p>
+                     <p class="text-gray-400 md:col-span-2 lg:col-span-3 text-sm sm:text-base">No other servers found with {{ ARVO_BOT_NAME }}.</p>
                 {% endif %}
                  {% if not manageable_servers and not other_servers_with_bot %}
-                    <p class="text-gray-400 md:col-span-2 lg:col-span-3">It seems {{ ARVO_BOT_NAME }} isn't in any servers you're currently in, or we couldn't fetch the list. Try inviting it or refreshing!</p>
+                    <p class="text-gray-400 md:col-span-2 lg:col-span-3 text-sm sm:text-base">It seems {{ ARVO_BOT_NAME }} isn't in any servers you're currently in, or we couldn't fetch the list. Try inviting it or refreshing!</p>
                 {% endif %}
             </div>
         </section>
     </main>
+    <script>
+        // Basic Mobile Sidebar Toggle
+        const sidebar = document.getElementById('sidebar');
+        const toggler = document.getElementById('mobile-sidebar-toggler');
+        if (sidebar && toggler) {
+            toggler.addEventListener('click', () => {
+                sidebar.classList.toggle('open');
+            });
+            // Optional: Close sidebar when clicking outside on mobile
+            document.addEventListener('click', (event) => {
+                if (sidebar.classList.contains('open') && !sidebar.contains(event.target) && !toggler.contains(event.target)) {
+                    sidebar.classList.remove('open');
+                }
+            });
+        }
+    </script>
 </body>
 </html>
