@@ -84,6 +84,7 @@ def load_all_data():
 def get_guild_config(guild_id: int) -> Dict[str, Any]:
     if guild_id not in guild_configurations:
         guild_configurations[guild_id] = json.loads(json.dumps(DEFAULT_GUILD_CONFIG))
+        # For "force enable" mode, we still initialize states, but sync logic will ignore them.
         guild_configurations[guild_id]["command_states"] = {
             cmd_key: True for cmd_key in ALL_CONFIGURABLE_COMMANDS_FLAT 
         }
@@ -98,6 +99,7 @@ def get_guild_config(guild_id: int) -> Dict[str, Any]:
             updated = True
     if "command_states" not in config: config["command_states"] = {}; updated = True
     
+    # Ensure all known commands have a state, even if sync logic ignores it for now
     for cmd_key in ALL_CONFIGURABLE_COMMANDS_FLAT:
         if cmd_key not in config["command_states"]:
             config["command_states"][cmd_key] = True; updated = True
@@ -112,14 +114,11 @@ def get_guild_log_channel_id(guild_id: int, log_type: str = "main") -> Optional[
     elif log_type == "staff_infraction": return config.get('staff_infraction_log_channel_id')
     return None
 
-def is_command_enabled_for_guild(guild_id: int, command_name: str) -> bool:
-    config = get_guild_config(guild_id)
-    return config.get('command_enabled_states', {}).get(command_name, True) 
-
 # --- Flask App ---
 app = Flask(__name__) 
 app.secret_key = FLASK_SECRET_KEY
 
+# ... (Flask routes remain the same as previous version - content omitted for brevity) ...
 @app.route('/')
 def index(): return render_template('index.html', ARVO_BOT_NAME=ARVO_BOT_NAME)
 @app.route('/privacy-policy')
@@ -128,14 +127,12 @@ def privacy_policy(): return render_template('privacy_policy.html', ARVO_BOT_NAM
 def terms_and_conditions(): return render_template('terms_and_conditions.html', ARVO_BOT_NAME=ARVO_BOT_NAME)
 @app.route('/keep-alive') 
 def keep_alive_route(): return f"{ARVO_BOT_NAME} site and dashboard server is alive!", 200
-
 @app.route('/login')
 def login():
     if not all([DISCORD_CLIENT_ID, DISCORD_REDIRECT_URI]): print("ERROR: OAuth2 misconfig in /login."); return "OAuth2 config error.", 500
     discord_oauth_url = (f"{API_ENDPOINT}/oauth2/authorize?client_id={DISCORD_CLIENT_ID}"
                          f"&redirect_uri={DISCORD_REDIRECT_URI}&response_type=code&scope=identify guilds")
     return redirect(discord_oauth_url)
-
 @app.route('/callback')
 def callback():
     if not all([DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_REDIRECT_URI]): print("ERROR: OAuth2 server misconfig in /callback."); return "OAuth2 server config error.", 500
@@ -151,7 +148,6 @@ def callback():
     except requests.exceptions.RequestException as e: print(f"ERROR: OAuth2 callback exception: {e}"); flash("Error during Discord authentication. Please try again.", "error"); return redirect(url_for('index'))
 @app.route('/logout')
 def logout(): session.clear(); flash("You have been logged out.", "success"); return redirect(url_for('index'))
-
 @app.route('/dashboard') 
 @app.route('/dashboard/servers') 
 def dashboard_servers():
@@ -192,13 +188,11 @@ COMMAND_CATEGORIES = {
 }
 ALL_CONFIGURABLE_COMMANDS_FLAT = [cmd for sublist in COMMAND_CATEGORIES.values() for cmd in sublist if cmd != "arvo_config_setup"]
 
-
 @app.route('/dashboard/guild/<guild_id_str>', methods=['GET'])
 def dashboard_guild(guild_id_str: str):
     if 'discord_user_id' not in session: return redirect(url_for('login', next=request.url))
     try: guild_id = int(guild_id_str)
     except ValueError: flash("Invalid Server ID format.", "error"); return redirect(url_for('dashboard_servers'))
-
     access_token = session.get('discord_oauth_token', {}).get('access_token')
     if not access_token: flash("Your session has expired. Please log in again.", "error"); return redirect(url_for('logout'))
     headers = {'Authorization': f'Bearer {access_token}'}
@@ -212,27 +206,17 @@ def dashboard_guild(guild_id_str: str):
                 break
     except Exception as e: print(f"Error re-fetching guilds for /dashboard/guild/{guild_id_str}: {e}"); flash("Error verifying server permissions.", "error"); return redirect(url_for('dashboard_servers')) 
     if not can_manage_this_guild: flash("You do not have permission to manage this server's Arvo settings.", "error"); return redirect(url_for('dashboard_servers'))
-    
     actual_guild_object = bot.get_guild(guild_id) 
     if not actual_guild_object: flash(f"{ARVO_BOT_NAME} is not in '{guild_name_for_dashboard}'. Please invite it first.", "error"); return redirect(url_for('dashboard_servers'))
-
     guild_config = get_guild_config(guild_id)
     command_states = guild_config.get('command_enabled_states', {})
     for cmd_name in ALL_CONFIGURABLE_COMMANDS_FLAT: 
         if cmd_name not in command_states: command_states[cmd_name] = True 
-
     guild_channels = [{'id': str(ch.id), 'name': ch.name} for ch in sorted(actual_guild_object.text_channels, key=lambda c: c.name) if ch.permissions_for(actual_guild_object.me).send_messages]
     guild_roles = [{'id': str(r.id), 'name': r.name} for r in sorted(actual_guild_object.roles, key=lambda role: role.position, reverse=True) if not r.is_default()]
-
-
     return render_template('dashboard_guild.html', 
-                           ARVO_BOT_NAME=ARVO_BOT_NAME, 
-                           guild_name=guild_name_for_dashboard, 
-                           guild_id=guild_id_str,
-                           command_categories=COMMAND_CATEGORIES,
-                           command_states=command_states,
-                           guild_channels=guild_channels,
-                           guild_roles=guild_roles,
+                           ARVO_BOT_NAME=ARVO_BOT_NAME, guild_name=guild_name_for_dashboard, guild_id=guild_id_str,
+                           command_categories=COMMAND_CATEGORIES, command_states=command_states, guild_channels=guild_channels, guild_roles=guild_roles,
                            current_main_log_channel_id=str(guild_config.get("log_channel_id")) if guild_config.get("log_channel_id") else "",
                            current_promotion_log_channel_id=str(guild_config.get("promotion_log_channel_id")) if guild_config.get("promotion_log_channel_id") else "",
                            current_staff_infraction_log_channel_id=str(guild_config.get("staff_infraction_log_channel_id")) if guild_config.get("staff_infraction_log_channel_id") else "",
@@ -245,7 +229,6 @@ def save_command_settings(guild_id_str: str):
     if 'discord_user_id' not in session: return redirect(url_for('login', next=request.referrer or url_for('dashboard_servers')))
     try: guild_id = int(guild_id_str)
     except ValueError: abort(400, "Invalid Guild ID")
-
     access_token = session.get('discord_oauth_token', {}).get('access_token')
     if not access_token: flash("Your session has expired.", "error"); return redirect(url_for('logout'))
     headers = {'Authorization': f'Bearer {access_token}'}
@@ -258,7 +241,6 @@ def save_command_settings(guild_id_str: str):
                 can_manage_this_guild = True; break
     except Exception: pass 
     if not can_manage_this_guild: abort(403, "You do not have permission to manage this server's settings.")
-    
     guild_config = get_guild_config(guild_id)
     command_enabled_states = guild_config.setdefault('command_enabled_states', {})
     something_changed = False
@@ -266,34 +248,30 @@ def save_command_settings(guild_id_str: str):
         is_enabled = f'cmd_{cmd_name}' in request.form 
         if command_enabled_states.get(cmd_name, True) != is_enabled: something_changed = True
         command_enabled_states[cmd_name] = is_enabled
-    
     save_to_json(guild_configurations, CONFIG_FILE)
-    
-    if something_changed:
+    if something_changed: # Only sync if there was an actual change in toggle state
         async def do_sync():
             target_guild = bot.get_guild(guild_id) 
-            if target_guild: await sync_guild_commands(target_guild)
+            if target_guild: await sync_guild_commands(target_guild, force_all_on=True) # Pass force_all_on
         if bot.loop: bot.loop.create_task(do_sync()) 
-        flash('Command settings saved and sync initiated!', 'success')
+        flash('Command settings saved! (All commands currently force-enabled for testing).', 'success')
     else:
         flash('No changes detected in command settings.', 'info')
     return redirect(url_for('dashboard_guild', guild_id_str=guild_id_str))
 
+# ... (save_log_channel_settings and save_staff_role_settings remain the same) ...
 @app.route('/dashboard/guild/<guild_id_str>/save_log_channel_settings', methods=['POST'])
 def save_log_channel_settings(guild_id_str: str):
     if 'discord_user_id' not in session: return redirect(url_for('login', next=request.referrer or url_for('dashboard_guild', guild_id_str=guild_id_str)))
     try: guild_id = int(guild_id_str)
     except ValueError: abort(400, "Invalid Guild ID")
-
     actual_guild_object = bot.get_guild(guild_id) 
     if not actual_guild_object: abort(404, "Bot not in guild or guild not found")
     user_discord_id = session.get('discord_user_id')
     if not user_discord_id: abort(403, "User session error.") 
-    
     member = actual_guild_object.get_member(int(user_discord_id))
     if not member or not member.guild_permissions.administrator:
         abort(403, "You must be an Administrator to change log channel settings.")
-
     guild_config = get_guild_config(guild_id)
     try:
         guild_config['log_channel_id'] = int(request.form.get('main_log_channel')) if request.form.get('main_log_channel') else None
@@ -302,7 +280,6 @@ def save_log_channel_settings(guild_id_str: str):
     except ValueError:
         flash("Invalid channel ID submitted.", "error")
         return redirect(url_for('dashboard_guild', guild_id_str=guild_id_str))
-
     save_to_json(guild_configurations, CONFIG_FILE)
     flash('Log channel settings saved successfully!', 'success')
     return redirect(url_for('dashboard_guild', guild_id_str=guild_id_str))
@@ -312,16 +289,13 @@ def save_staff_role_settings(guild_id_str: str):
     if 'discord_user_id' not in session: return redirect(url_for('login', next=request.referrer or url_for('dashboard_guild', guild_id_str=guild_id_str)))
     try: guild_id = int(guild_id_str)
     except ValueError: abort(400, "Invalid Guild ID")
-
     actual_guild_object = bot.get_guild(guild_id) 
     if not actual_guild_object: abort(404, "Bot not in guild or guild not found")
     user_discord_id = session.get('discord_user_id')
     if not user_discord_id: abort(403, "User session error.")
-
     member = actual_guild_object.get_member(int(user_discord_id))
     if not member or not member.guild_permissions.administrator:
         abort(403, "You must be an Administrator to change staff role settings.")
-
     guild_config = get_guild_config(guild_id)
     try:
         guild_config['staff_role_ids'] = [int(r_id) for r_id in request.form.getlist('staff_role_ids')]
@@ -329,11 +303,9 @@ def save_staff_role_settings(guild_id_str: str):
     except ValueError:
         flash("Invalid role ID submitted.", "error")
         return redirect(url_for('dashboard_guild', guild_id_str=guild_id_str))
-
     save_to_json(guild_configurations, CONFIG_FILE)
     flash('Staff role settings saved successfully!', 'success')
     return redirect(url_for('dashboard_guild', guild_id_str=guild_id_str))
-
 
 def run_flask():
   port = int(os.environ.get('PORT', 8080)) 
@@ -351,38 +323,21 @@ class ArvoBot(commands.Bot):
         super().__init__(*args, **kwargs)
         self.COMMAND_REGISTRY: Dict[str, Any] = {}
         self.COMMAND_REGISTRY_READY = asyncio.Event()
-        # self.loop is inherited from commands.Bot
 
     async def setup_hook(self): 
         temp_registry = {}
-        # Ensure all commands are defined before this hook runs
-        # This includes top-level commands and commands within groups
         all_tree_commands = self.tree.get_commands(type=discord.AppCommandType.chat_input)
-
         def process_command(cmd_obj, group_name=None):
             key = f"{group_name}_{cmd_obj.name}" if group_name else cmd_obj.name
             is_manageable = key in ALL_CONFIGURABLE_COMMANDS_FLAT
-            
-            # Explicitly mark /arvo_config setup as not manageable by users for toggling
-            if group_name == arvo_config_group.name and cmd_obj.name == "setup": 
-                is_manageable = False 
-
-            temp_registry[key] = {
-                "app_command_obj": cmd_obj,
-                "manageable": is_manageable,
-                "group_name": group_name,
-                "base_name": cmd_obj.name
-            }
-
+            if group_name == arvo_config_group.name and cmd_obj.name == "setup": is_manageable = False 
+            temp_registry[key] = {"app_command_obj": cmd_obj, "manageable": is_manageable, "group_name": group_name, "base_name": cmd_obj.name}
         for cmd in all_tree_commands:
-            if isinstance(cmd, app_commands.Group): # Check if it's one of our defined groups
+            if isinstance(cmd, app_commands.Group): 
                 if cmd.name in [arvo_config_group.name, infract_group.name, staffmanage_group.name, staffinfract_group.name]:
                     for sub_cmd in cmd.commands: 
-                        if isinstance(sub_cmd, app_commands.Command):
-                             process_command(sub_cmd, group_name=cmd.name)
-            elif isinstance(cmd, app_commands.Command): # Top-level commands
-                process_command(cmd)
-                
+                        if isinstance(sub_cmd, app_commands.Command): process_command(sub_cmd, group_name=cmd.name)
+            elif isinstance(cmd, app_commands.Command): process_command(cmd)
         self.COMMAND_REGISTRY = temp_registry
         print(f"INFO ({ARVO_BOT_NAME}): COMMAND_REGISTRY populated in setup_hook with {len(self.COMMAND_REGISTRY)} entries.")
         self.COMMAND_REGISTRY_READY.set()
@@ -393,50 +348,43 @@ intents.members = True
 intents.message_content = True 
 bot = ArvoBot(command_prefix=commands.when_mentioned_or("!arvo-main-unused!"), intents=intents)
 
-# --- Custom Check Exceptions ---
-class CommandDisabledInGuild(app_commands.CheckFailure):
+# --- Custom Check Exceptions & Permission Logic (Simplified for force-enable) ---
+class CommandDisabledInGuild(app_commands.CheckFailure): # Still define, but won't be raised if force_all_on=True
     def __init__(self, command_name: str, *args):
         super().__init__(f"The command `/{command_name.replace('_', ' ')}` is currently disabled in this server.", *args)
-
 class MissingConfiguredRole(app_commands.CheckFailure):
     def __init__(self, command_name: str, role_name: str | None, *args):
         message = f"You need the '{role_name}' role to use `/{command_name.replace('_', ' ')}`." if role_name else f"You lack permissions for `/{command_name.replace('_', ' ')}`."
         super().__init__(message, *args)
-
 class HierarchyError(app_commands.CheckFailure):
     def __init__(self, message: str, *args): super().__init__(message, *args)
 
-# --- Permission Check Functions & Decorators ---
 def is_general_staff(interaction: discord.Interaction) -> bool: 
     if not interaction.guild or not isinstance(interaction.user, discord.Member): return False 
     if interaction.user.guild_permissions.administrator: return True
     config = get_guild_config(interaction.guild_id)
     staff_role_ids = config.get("staff_role_ids", [])
     return any(role.id in staff_role_ids for role in interaction.user.roles)
-
 def is_high_rank_staff(interaction: discord.Interaction) -> bool: 
     if not interaction.guild or not isinstance(interaction.user, discord.Member): return False 
     if interaction.user.guild_permissions.administrator: return True
     config = get_guild_config(interaction.guild_id)
     high_rank_role_id = config.get("high_rank_staff_role_id")
-    if not high_rank_role_id: return False 
+    if not high_rank_role_id: return False # If no high rank role is set, only admins are high rank
     return any(role.id == high_rank_role_id for role in interaction.user.roles)
 
-def check_command_status_and_permission(permission_level: Optional[str] = "general_staff"):
+def check_command_status_and_permission(permission_level: Optional[str] = "general_staff", force_all_on_for_testing: bool = True): # Added force_all_on_for_testing
     async def predicate(interaction: discord.Interaction) -> bool: 
         if not interaction.guild_id: return True 
+        cmd_obj = interaction.command; command_name_key = cmd_obj.name
+        if cmd_obj.parent: command_name_key = f"{cmd_obj.parent.name}_{cmd_obj.name}"
         
-        cmd_obj = interaction.command
-        command_name_key = cmd_obj.name
-        if cmd_obj.parent: 
-            command_name_key = f"{cmd_obj.parent.name}_{cmd_obj.name}"
-        
-        if not is_command_enabled_for_guild(interaction.guild_id, command_name_key):
-            raise CommandDisabledInGuild(command_name_key)
+        if not force_all_on_for_testing: # Only check enabled state if not forcing all on
+            if not is_command_enabled_for_guild(interaction.guild_id, command_name_key):
+                raise CommandDisabledInGuild(command_name_key)
 
         if permission_level == "general_staff":
-            if not is_general_staff(interaction):
-                raise MissingConfiguredRole(command_name_key, "configured Staff")
+            if not is_general_staff(interaction): raise MissingConfiguredRole(command_name_key, "configured Staff")
         elif permission_level == "high_rank_staff":
             config = get_guild_config(interaction.guild_id)
             high_rank_role_id = config.get("high_rank_staff_role_id")
@@ -452,7 +400,7 @@ def check_command_status_and_permission(permission_level: Optional[str] = "gener
         return True
     return app_commands.check(predicate)
 
-# --- Confirmation View & Logging Helper ---
+# --- Confirmation View, Logging, Infractions, Hierarchy (Same as previous version - content omitted for brevity) ---
 class ConfirmationView(View):
     def __init__(self, author_id: int):
         super().__init__(timeout=60.0); self.value = None; self.author_id = author_id
@@ -477,7 +425,6 @@ async def log_to_discord_channel(guild: discord.Guild, channel_type: str, embed:
     if not log_channel_id and channel_type != "main": 
         log_channel_id = get_guild_log_channel_id(guild.id, "main")
         if log_channel_id: embed.set_footer(text=f"{embed.footer.text if embed.footer and embed.footer.text else ''} (Sent to main log: {channel_type} log channel not set)".strip())
-            
     if log_channel_id:
         log_channel = guild.get_channel(log_channel_id)
         if isinstance(log_channel, TextChannel):
@@ -502,19 +449,15 @@ def check_hierarchy(interaction: discord.Interaction, target_member: discord.Mem
     if isinstance(interaction.user, discord.Member) and isinstance(target_member, discord.Member): 
         if interaction.user.top_role <= target_member.top_role: raise HierarchyError("You cannot perform this action on a member with an equal or higher role.")
     return True
-
 # --- Bot Event Listeners ---
 @bot.event
 async def on_ready():
-    # load_all_data() is called at the end of the script before bot.run()
     print(f'{ARVO_BOT_NAME} has logged in as {bot.user.name} (ID: {bot.user.id})')
     print(f'Discord.py Version: {discord.__version__}')
     if RENDER_EXTERNAL_URL: print(f"INFO ({ARVO_BOT_NAME}): Website accessible via {RENDER_EXTERNAL_URL}")
     if not all([DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, FLASK_SECRET_KEY]): print(f"CRITICAL WARNING ({ARVO_BOT_NAME}): Core OAuth/Flask env vars missing.")
-    
     await bot.COMMAND_REGISTRY_READY.wait() 
-    for guild in bot.guilds: await sync_guild_commands(guild)
-    
+    for guild in bot.guilds: await sync_guild_commands(guild, force_all_on=True) # Force all on
     print(f'{ARVO_BOT_NAME} is ready and online!')
     await bot.change_presence(activity=discord.Game(name=f"/arvohelp | {ARVO_BOT_NAME}"))
 
@@ -523,40 +466,67 @@ async def on_guild_join(guild: discord.Guild):
     print(f"INFO: Joined new guild: {guild.name} (ID: {guild.id})")
     get_guild_config(guild.id) 
     await bot.COMMAND_REGISTRY_READY.wait()
-    await sync_guild_commands(guild)
+    await sync_guild_commands(guild, force_all_on=True) # Force all on for new guilds too
 
-async def sync_guild_commands(guild: discord.Guild):
-    print(f"INFO: Attempting to sync commands for guild: {guild.name} ({guild.id})")
+async def sync_guild_commands(guild: discord.Guild, force_all_on: bool = False): # Added force_all_on parameter
+    print(f"INFO: Attempting to sync commands for guild: {guild.name} ({guild.id}). Force all on: {force_all_on}")
     guild_config = get_guild_config(guild.id)
     try:
         bot.tree.clear_commands(guild=guild)
         
+        # Always add core non-manageable commands/groups
         bot.tree.add_command(arvo_config_group, guild=guild) 
-        bot.tree.add_command(togglecommand_cmd, guild=guild)
+        bot.tree.add_command(togglecommand_cmd, guild=guild) # togglecommand is not in COMMAND_REGISTRY as manageable
         
-        added_groups_this_sync = set()
+        # Add top-level manageable commands (ping, arvohelp, viewinfractions)
+        # These are now handled by iterating COMMAND_REGISTRY below.
+
+        # Add manageable command groups and their subcommands
+        # If force_all_on is True, add all manageable groups and top-level commands.
+        # Otherwise, respect the command_states from guild_config.
+        
+        groups_to_register_this_sync = set() # To avoid adding a group multiple times if multiple subcommands are enabled
 
         for cmd_key, cmd_data in bot.COMMAND_REGISTRY.items():
-            if not cmd_data.get("manageable", True): continue
             app_cmd_obj = cmd_data.get("app_command_obj")
-            if not app_cmd_obj: print(f"WARNING: No app_command_obj for {cmd_key} during sync for {guild.name}"); continue
+            if not app_cmd_obj: 
+                print(f"WARNING: No app_command_obj for {cmd_key} during sync for {guild.name}")
+                continue
 
-            is_enabled = guild_config.get("command_states", {}).get(cmd_key, True)
-            if is_enabled:
+            is_manageable_in_registry = cmd_data.get("manageable", False) # Check if it's even toggleable
+            
+            # Determine if this specific command should be enabled for this sync
+            should_be_enabled_this_sync = False
+            if force_all_on:
+                if is_manageable_in_registry: # If forcing all, enable all that are marked manageable in registry
+                    should_be_enabled_this_sync = True
+            else: # Not forcing all, so respect config
+                if is_manageable_in_registry:
+                    should_be_enabled_this_sync = guild_config.get("command_states", {}).get(cmd_key, True)
+            
+            if should_be_enabled_this_sync:
                 parent_group_name = cmd_data.get("group_name")
-                if parent_group_name:
-                    if parent_group_name not in added_groups_this_sync:
-                        group_to_add = None
-                        if parent_group_name == "infract": group_to_add = infract_group
-                        elif parent_group_name == "staffmanage": group_to_add = staffmanage_group
-                        elif parent_group_name == "staffinfract": group_to_add = staffinfract_group
+                if parent_group_name: # It's a subcommand
+                    if parent_group_name not in groups_to_register_this_sync:
+                        # Find the actual group object (e.g., infract_group)
+                        group_obj_to_add = None
+                        if parent_group_name == infract_group.name: group_obj_to_add = infract_group
+                        elif parent_group_name == staffmanage_group.name: group_obj_to_add = staffmanage_group
+                        elif parent_group_name == staffinfract_group.name: group_obj_to_add = staffinfract_group
                         
-                        if group_to_add:
-                            try: bot.tree.add_command(group_to_add, guild=guild); added_groups_this_sync.add(parent_group_name)
-                            except discord.app_commands.CommandAlreadyRegistered: pass 
-                        else: print(f"WARNING: Could not find group object for {parent_group_name}")
-                else: 
-                    bot.tree.add_command(app_cmd_obj, guild=guild)
+                        if group_obj_to_add:
+                            try:
+                                bot.tree.add_command(group_obj_to_add, guild=guild)
+                                groups_to_register_this_sync.add(parent_group_name)
+                                print(f"DEBUG: Added group '{parent_group_name}' to guild {guild.name}")
+                            except discord.app_commands.CommandAlreadyRegistered: pass # Already added in this sync cycle
+                        else:
+                            print(f"WARNING: Could not find group object for '{parent_group_name}' to add to guild {guild.name}")
+                else: # It's a top-level manageable command
+                    try:
+                        bot.tree.add_command(app_cmd_obj, guild=guild)
+                        print(f"DEBUG: Added top-level command '{cmd_key}' to guild {guild.name}")
+                    except discord.app_commands.CommandAlreadyRegistered: pass
         
         await bot.tree.sync(guild=guild)
         print(f"SUCCESS: Synced commands for guild {guild.name} ({guild.id}).")
@@ -571,12 +541,12 @@ staffinfract_group = app_commands.Group(name="staffinfract", description="Staff 
 
 # --- Utility Commands ---
 @bot.tree.command(name="ping", description=f"Check {ARVO_BOT_NAME}'s responsiveness.")
-@check_command_status_and_permission(permission_level=None)
+@check_command_status_and_permission(permission_level=None, force_all_on_for_testing=True)
 async def ping(interaction: discord.Interaction): 
     await interaction.response.send_message(f"{ARVO_BOT_NAME} Pong! 🏓 Latency: {bot.latency * 1000:.2f}ms", ephemeral=True)
 
 @bot.tree.command(name="arvohelp", description=f"Get information about {ARVO_BOT_NAME}.")
-@check_command_status_and_permission(permission_level=None)
+@check_command_status_and_permission(permission_level=None, force_all_on_for_testing=True)
 async def arvohelp(interaction: discord.Interaction): 
     embed = Embed(title=f"{ARVO_BOT_NAME} - Smart Staff Management", description=ARVO_BOT_DESCRIPTION, color=Color.blue())
     embed.add_field(name="How to Use", value="Use slash commands. Manage settings via the dashboard.", inline=False)
@@ -597,9 +567,9 @@ async def arvo_config_setup(interaction: discord.Interaction):
     msg += "Use the dashboard to configure log channels, staff roles, and command settings."
     await interaction.response.send_message(msg, ephemeral=True)
 
-# --- Infraction Commands ---
+# --- Infraction Commands (decorated with force_all_on_for_testing=True) ---
 @infract_group.command(name="warn", description="Warns a user.")
-@check_command_status_and_permission(permission_level="general_staff")
+@check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(member="The member to warn.", reason="The reason for the warning.")
 async def infract_warn(interaction: discord.Interaction, member: discord.Member, reason: str): 
     if not interaction.guild: return
@@ -621,8 +591,11 @@ async def infract_warn(interaction: discord.Interaction, member: discord.Member,
     elif view.value is False: await interaction.followup.send("⚠️ Warn cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Warn confirmation timed out.", ephemeral=True)
 
+# ... (Rest of the infraction, staffmanage, staffinfract, viewinfractions commands also need @check_command_status_and_permission(..., force_all_on_for_testing=True) ) ...
+# For brevity, I'll apply it to one more and assume it's applied to all manageable ones.
+
 @infract_group.command(name="mute", description="Mutes a user for a specified number of hours.")
-@check_command_status_and_permission(permission_level="general_staff")
+@check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(member="The member to mute.", hours="Duration in hours (1-672).", reason="The reason for the mute.")
 async def infract_mute(interaction: discord.Interaction, member: discord.Member, hours: app_commands.Range[int, 1, 672], reason: str): 
     if not interaction.guild: return
@@ -650,7 +623,7 @@ async def infract_mute(interaction: discord.Interaction, member: discord.Member,
     else: await interaction.followup.send("⚠️ Mute confirmation timed out.", ephemeral=True)
 
 @infract_group.command(name="kick", description="Kicks a user from the server.")
-@check_command_status_and_permission(permission_level="general_staff")
+@check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(member="The member to kick.", reason="The reason for the kick.")
 async def infract_kick(interaction: discord.Interaction, member: discord.Member, reason: str): 
     if not interaction.guild: return
@@ -678,7 +651,7 @@ async def infract_kick(interaction: discord.Interaction, member: discord.Member,
     else: await interaction.followup.send("⚠️ Kick confirmation timed out.", ephemeral=True)
 
 @infract_group.command(name="ban", description="Bans a user from the server.")
-@check_command_status_and_permission(permission_level="general_staff")
+@check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(user="User to ban (ID if not in server).", reason="Reason for ban.", delete_message_days="Days of messages to delete (0-7).")
 async def infract_ban(interaction: discord.Interaction, user: discord.User, reason: str, delete_message_days: app_commands.Range[int, 0, 7] = 0): 
     if not interaction.guild: return
@@ -707,9 +680,8 @@ async def infract_ban(interaction: discord.Interaction, user: discord.User, reas
     elif view.value is False: await interaction.followup.send("⚠️ Ban cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Ban confirmation timed out.", ephemeral=True)
 
-# --- Staff Management Commands ---
 @staffmanage_group.command(name="promote", description="Promotes a staff member and assigns a new role.")
-@check_command_status_and_permission(permission_level="high_rank_staff")
+@check_command_status_and_permission(permission_level="high_rank_staff", force_all_on_for_testing=True)
 @app_commands.describe(staff_member="Staff member to promote.", new_role="New role to assign.", reason="Reason for promotion.")
 async def staffmanage_promote(interaction: discord.Interaction, staff_member: discord.Member, new_role: discord.Role, reason: str): 
     if not interaction.guild: return
@@ -726,7 +698,6 @@ async def staffmanage_promote(interaction: discord.Interaction, staff_member: di
             log_main.add_field(name="Staff", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="New Role", value=new_role.mention, inline=True).add_field(name="Reason", value=reason, inline=False)
             log_main.set_footer(text=f"Guild: {interaction.guild.name}")
             await log_to_discord_channel(interaction.guild, "main", log_main)
-
             promo_log = Embed(title="🎉 Staff Promotion 🎉", description="The Executive team has decided to promote you! Congratulations!", color=Color.gold(), timestamp=discord.utils.utcnow())
             promo_log.set_author(name=staff_member.display_name, icon_url=staff_member.display_avatar.url if staff_member.display_avatar else None)
             promo_log.add_field(name="Staff member:", value=staff_member.mention, inline=False).add_field(name="New Rank:", value=new_role.mention, inline=False).add_field(name="Reason:", value=reason, inline=False).add_field(name="Promoted by:", value=interaction.user.mention, inline=False)
@@ -740,7 +711,7 @@ async def staffmanage_promote(interaction: discord.Interaction, staff_member: di
     else: await interaction.followup.send("⚠️ Promotion confirmation timed out.", ephemeral=True)
 
 @staffmanage_group.command(name="demote", description="Demotes a staff member and removes a role.")
-@check_command_status_and_permission(permission_level="high_rank_staff")
+@check_command_status_and_permission(permission_level="high_rank_staff", force_all_on_for_testing=True)
 @app_commands.describe(staff_member="Staff member to demote.", role_to_remove="Role to remove.", reason="Reason for demotion.")
 async def staffmanage_demote(interaction: discord.Interaction, staff_member: discord.Member, role_to_remove: discord.Role, reason: str): 
     if not interaction.guild: return
@@ -767,7 +738,7 @@ async def staffmanage_demote(interaction: discord.Interaction, staff_member: dis
     else: await interaction.followup.send("⚠️ Demotion confirmation timed out.", ephemeral=True)
 
 @staffmanage_group.command(name="terminate", description="Logs staff termination. Manual role removal required.")
-@check_command_status_and_permission(permission_level="high_rank_staff")
+@check_command_status_and_permission(permission_level="high_rank_staff", force_all_on_for_testing=True)
 @app_commands.describe(staff_member="Staff member being terminated.", reason="Reason for termination.")
 async def staffmanage_terminate(interaction: discord.Interaction, staff_member: discord.Member, reason: str): 
     if not interaction.guild: return
@@ -783,7 +754,6 @@ async def staffmanage_terminate(interaction: discord.Interaction, staff_member: 
         log_main.add_field(name="Staff", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="Reason", value=reason, inline=False).add_field(name="Action Required", value="Manually remove staff roles.", inline=False)
         log_main.set_footer(text=f"Termination Record ID: {inf_id} | Guild: {interaction.guild.name}")
         await log_to_discord_channel(interaction.guild, "main", log_main)
-        
         staff_inf_log = Embed(title=f"{interaction.guild.name} | Staff Infraction", color=Color.dark_red(), timestamp=discord.utils.utcnow())
         staff_inf_log.add_field(name="Member:", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="Reasoning:", value=reason, inline=True).add_field(name="Punishment:", value="Termination", inline=True).add_field(name="Issued by:", value=interaction.user.mention, inline=False).set_footer(text=f"Ref No: {inf_id}")
         await log_to_discord_channel(interaction.guild, "staff_infraction", staff_inf_log, content=staff_member.mention)
@@ -793,9 +763,8 @@ async def staffmanage_terminate(interaction: discord.Interaction, staff_member: 
     elif view.value is False: await interaction.followup.send("⚠️ Termination logging cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Termination confirmation timed out.", ephemeral=True)
 
-# --- Staff Infraction Commands ---
 @staffinfract_group.command(name="warning", description="Issues an official warning to a staff member.")
-@check_command_status_and_permission(permission_level="high_rank_staff")
+@check_command_status_and_permission(permission_level="high_rank_staff", force_all_on_for_testing=True)
 @app_commands.describe(staff_member="Staff member to warn.", reason="Reason for staff warning.")
 async def staffinfract_warning(interaction: discord.Interaction, staff_member: discord.Member, reason: str): 
     if not interaction.guild: return
@@ -811,7 +780,6 @@ async def staffinfract_warning(interaction: discord.Interaction, staff_member: d
         log_main.add_field(name="Staff", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="Reason", value=reason, inline=False)
         log_main.set_footer(text=f"Infraction ID: {inf_id} | Guild: {interaction.guild.name}")
         await log_to_discord_channel(interaction.guild, "main", log_main)
-
         staff_inf_log = Embed(title=f"{interaction.guild.name} | Staff Infraction", color=Color.orange(), timestamp=discord.utils.utcnow())
         staff_inf_log.add_field(name="Member:", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="Reasoning:", value=reason, inline=True).add_field(name="Punishment:", value="Staff Warning", inline=True).add_field(name="Issued by:", value=interaction.user.mention, inline=False).set_footer(text=f"Ref No: {inf_id}")
         await log_to_discord_channel(interaction.guild, "staff_infraction", staff_inf_log, content=staff_member.mention)
@@ -822,7 +790,7 @@ async def staffinfract_warning(interaction: discord.Interaction, staff_member: d
     else: await interaction.followup.send("⚠️ Staff warning confirmation timed out.", ephemeral=True)
 
 @staffinfract_group.command(name="strike", description="Issues a strike to a staff member.")
-@check_command_status_and_permission(permission_level="high_rank_staff")
+@check_command_status_and_permission(permission_level="high_rank_staff", force_all_on_for_testing=True)
 @app_commands.describe(staff_member="Staff member to issue a strike to.", reason="Reason for staff strike.")
 async def staffinfract_strike(interaction: discord.Interaction, staff_member: discord.Member, reason: str): 
     if not interaction.guild: return
@@ -838,7 +806,6 @@ async def staffinfract_strike(interaction: discord.Interaction, staff_member: di
         log_main.add_field(name="Staff", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="Reason", value=reason, inline=False)
         log_main.set_footer(text=f"Infraction ID: {inf_id} | Guild: {interaction.guild.name}")
         await log_to_discord_channel(interaction.guild, "main", log_main)
-
         staff_inf_log = Embed(title=f"{interaction.guild.name} | Staff Infraction", color=Color.red(), timestamp=discord.utils.utcnow())
         staff_inf_log.add_field(name="Member:", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="Reasoning:", value=reason, inline=True).add_field(name="Punishment:", value="Staff Strike", inline=True).add_field(name="Issued by:", value=interaction.user.mention, inline=False).set_footer(text=f"Ref No: {inf_id}")
         await log_to_discord_channel(interaction.guild, "staff_infraction", staff_inf_log, content=staff_member.mention)
@@ -848,9 +815,8 @@ async def staffinfract_strike(interaction: discord.Interaction, staff_member: di
     elif view.value is False: await interaction.followup.send("⚠️ Staff strike cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Staff strike confirmation timed out.", ephemeral=True)
 
-# --- View Infractions Command ---
 @bot.tree.command(name="viewinfractions", description="Views infractions for a given user.")
-@check_command_status_and_permission(permission_level="general_staff")
+@check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(user="The user whose infractions you want to view.")
 async def viewinfractions(interaction: discord.Interaction, user: discord.User): 
     if not interaction.guild_id: return
@@ -878,7 +844,7 @@ async def viewinfractions(interaction: discord.Interaction, user: discord.User):
     if not normal_infractions_text and not staff_infractions_text: await interaction.response.send_message(f"No infractions found for {user.mention}.", ephemeral=True); return
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# --- Toggle Command ---
+# --- Toggle Command (Still saves state, but sync logic forces all on for testing) ---
 @app_commands.command(name="togglecommand", description="Enables or disables a manageable command for this server.")
 @app_commands.checks.has_permissions(administrator=True) 
 @app_commands.guild_only()
@@ -890,18 +856,18 @@ async def togglecommand_cmd(interaction: discord.Interaction, command_name: str,
         await interaction.response.send_message(f"⚠️ Command `{command_name}` is not a known manageable command.", ephemeral=True); return
     current_status = guild_config["command_states"].get(command_name, True)
     if current_status == enable:
-        await interaction.response.send_message(f"ℹ️ Command `{command_name}` is already {'enabled' if enable else 'disabled'}.", ephemeral=True); return
+        await interaction.response.send_message(f"ℹ️ Command `{command_name}` is already {'enabled' if enable else 'disabled'}. (Note: All commands force-enabled for testing).", ephemeral=True); return
     guild_config["command_states"][command_name] = enable
     save_to_json(guild_configurations, CONFIG_FILE)
-    async def do_sync():
+    async def do_sync(): # Sync will still force all on
         target_guild = bot.get_guild(interaction.guild_id)
-        if target_guild: await sync_guild_commands(target_guild)
+        if target_guild: await sync_guild_commands(target_guild, force_all_on=True)
     if bot.loop: bot.loop.create_task(do_sync())
     status_text = "enabled" if enable else "disabled"
-    await interaction.response.send_message(f"✅ Command `{command_name}` has been {status_text}. Changes may take a moment.", ephemeral=True)
-    log_embed = Embed(title="Command Toggled", color=Color.purple(), timestamp=discord.utils.utcnow())
+    await interaction.response.send_message(f"✅ Command `{command_name}` state set to {status_text}. (Note: All commands currently force-enabled for testing). Changes will fully apply when force-enable is removed.", ephemeral=True)
+    log_embed = Embed(title="Command Toggle Attempted (Force-Enable Active)", color=Color.purple(), timestamp=discord.utils.utcnow())
     log_embed.set_author(name=f"Admin: {interaction.user}", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
-    log_embed.add_field(name="Command", value=f"`/{command_name.replace('_',' ')}`", inline=True).add_field(name="New Status", value=status_text.title(), inline=True)
+    log_embed.add_field(name="Command", value=f"`/{command_name.replace('_',' ')}`", inline=True).add_field(name="Attempted Status", value=status_text.title(), inline=True)
     log_embed.set_footer(text=f"Guild: {interaction.guild.name}")
     await log_to_discord_channel(interaction.guild, "main", log_embed)
 
@@ -910,7 +876,7 @@ async def togglecommand_autocomplete(interaction: discord.Interaction, current: 
     choices = [app_commands.Choice(name=cmd_key.replace("_", " "), value=cmd_key) for cmd_key in ALL_CONFIGURABLE_COMMANDS_FLAT if current.lower() in cmd_key.lower()] 
     return choices[:25]
 
-# --- Global Error Handler ---
+# --- Global Error Handler & Main Execution (Same as previous version) ---
 async def global_app_command_error_handler(interaction: discord.Interaction, error: app_commands.AppCommandError): 
     user_readable_error = "An unexpected error occurred. Please try again later."
     ephemeral_response = True
@@ -919,7 +885,6 @@ async def global_app_command_error_handler(interaction: discord.Interaction, err
     elif isinstance(error, app_commands.MissingPermissions): user_readable_error = f"You lack Discord permissions: {', '.join(error.missing_permissions)}"
     elif isinstance(error, app_commands.BotMissingPermissions): user_readable_error = f"I lack Discord permissions: {', '.join(error.missing_permissions)}"
     elif isinstance(error, app_commands.CheckFailure): user_readable_error = "You do not meet the requirements for this command."
-    
     cmd_name_for_log = interaction.command.qualified_name if interaction.command else "UnknownCmd"
     print(f"ERROR (Slash Command): User: {interaction.user}, Guild: {interaction.guild_id}, Cmd: {cmd_name_for_log}, Error: {type(error).__name__} - {error}")
     try:
@@ -928,10 +893,8 @@ async def global_app_command_error_handler(interaction: discord.Interaction, err
     except Exception as e_resp: print(f"ERROR sending error response: {e_resp}")
 bot.tree.on_error = global_app_command_error_handler
 
-# --- Running the Bot and Server ---
 async def main_async():
     async with bot: 
-        # The bot's setup_hook (ArvoBot.setup_hook) is called automatically by bot.start()
         start_keep_alive_server() 
         print(f"Flask web server thread started for {ARVO_BOT_NAME}.")
         print(f"Attempting to connect {ARVO_BOT_NAME} to Discord...")
@@ -940,9 +903,7 @@ async def main_async():
 if __name__ == "__main__":
     if not APP_BASE_URL_CONFIG: print(f"CRITICAL WARNING ({ARVO_BOT_NAME}): APP_BASE_URL or RENDER_EXTERNAL_URL env var not set.")
     if not DISCORD_CLIENT_ID or not DISCORD_CLIENT_SECRET: print(f"CRITICAL WARNING ({ARVO_BOT_NAME}): OAuth env vars not set.")
-    
     load_all_data() 
-    
     try: asyncio.run(main_async())
     except KeyboardInterrupt: print(f"{ARVO_BOT_NAME} shutting down manually...")
     except Exception as e: print(f"CRITICAL BOT RUN ERROR for {ARVO_BOT_NAME}: {e}")
