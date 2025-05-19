@@ -289,7 +289,11 @@ def save_log_channel_settings(guild_id_str: str):
     # Admin Permission Check (more robust than just manage_guild for sensitive settings)
     actual_guild_object = bot.get_guild(guild_id)
     if not actual_guild_object: abort(404, "Bot not in guild or guild not found")
-    member = actual_guild_object.get_member(int(session['discord_user_id']))
+    # Ensure session['discord_user_id'] is an int for get_member
+    user_discord_id = session.get('discord_user_id')
+    if not user_discord_id: abort(403, "User session error.") # Should not happen if already checked
+    
+    member = actual_guild_object.get_member(int(user_discord_id))
     if not member or not member.guild_permissions.administrator:
         abort(403, "You must be an Administrator to change log channel settings.")
 
@@ -314,7 +318,10 @@ def save_staff_role_settings(guild_id_str: str):
 
     actual_guild_object = bot.get_guild(guild_id)
     if not actual_guild_object: abort(404, "Bot not in guild or guild not found")
-    member = actual_guild_object.get_member(int(session['discord_user_id']))
+    user_discord_id = session.get('discord_user_id')
+    if not user_discord_id: abort(403, "User session error.")
+
+    member = actual_guild_object.get_member(int(user_discord_id))
     if not member or not member.guild_permissions.administrator:
         abort(403, "You must be an Administrator to change staff role settings.")
 
@@ -363,14 +370,14 @@ class HierarchyError(app_commands.CheckFailure):
     def __init__(self, message: str, *args): super().__init__(message, *args)
 
 # --- Permission Check Functions & Decorators ---
-def is_general_staff(interaction: Interaction) -> bool:
+def is_general_staff(interaction: discord.Interaction) -> bool: # Changed Interaction to discord.Interaction
     if not interaction.guild or not isinstance(interaction.user, Member): return False
     if interaction.user.guild_permissions.administrator: return True
     config = get_guild_config(interaction.guild_id)
     staff_role_ids = config.get("staff_role_ids", [])
     return any(role.id in staff_role_ids for role in interaction.user.roles)
 
-def is_high_rank_staff(interaction: Interaction) -> bool:
+def is_high_rank_staff(interaction: discord.Interaction) -> bool: # Changed Interaction to discord.Interaction
     if not interaction.guild or not isinstance(interaction.user, Member): return False
     if interaction.user.guild_permissions.administrator: return True
     config = get_guild_config(interaction.guild_id)
@@ -379,13 +386,12 @@ def is_high_rank_staff(interaction: Interaction) -> bool:
     return any(role.id == high_rank_role_id for role in interaction.user.roles)
 
 def check_command_status_and_permission(permission_level: Optional[str] = "general_staff"):
-    async def predicate(interaction: Interaction) -> bool:
+    async def predicate(interaction: discord.Interaction) -> bool: # Changed Interaction to discord.Interaction
         if not interaction.guild_id: return True 
         
-        # Determine the correct command name key (group_subcommand or command)
         cmd_obj = interaction.command
         command_name_key = cmd_obj.name
-        if cmd_obj.parent: # This is a subcommand
+        if cmd_obj.parent: 
             command_name_key = f"{cmd_obj.parent.name}_{cmd_obj.name}"
         
         if not is_command_enabled_for_guild(interaction.guild_id, command_name_key):
@@ -404,35 +410,36 @@ def check_command_status_and_permission(permission_level: Optional[str] = "gener
                     if role_obj: role_name = role_obj.name
                     raise MissingConfiguredRole(command_name_key, role_name)
         elif permission_level == "admin_only":
-            if not interaction.user.guild_permissions.administrator:
+            if not interaction.user.guild_permissions.administrator: # Corrected: was interaction.user, should be interaction.user.guild_permissions
                 raise MissingConfiguredRole(command_name_key, "Discord Administrator")
-        # If permission_level is None, only enabled check is performed.
         return True
     return app_commands.check(predicate)
 
-# --- Confirmation View & Logging Helper (from arvo_bot_main_py_v3_commands) ---
+# --- Confirmation View & Logging Helper ---
 class ConfirmationView(View):
     def __init__(self, author_id: int):
         super().__init__(timeout=60.0); self.value = None; self.author_id = author_id
-    async def interaction_check(self, interaction: Interaction) -> bool:
+    async def interaction_check(self, interaction: discord.Interaction) -> bool: # Changed Interaction to discord.Interaction
         if interaction.user.id != self.author_id: await interaction.response.send_message("This confirmation is not for you.", ephemeral=True); return False
         return True
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.green)
-    async def confirm_button(self, interaction: Interaction, button: Button):
+    async def confirm_button(self, interaction: discord.Interaction, button: Button): # Changed Interaction to discord.Interaction
         self.value = True; self.stop()
-        for item in self.children: item.disabled = True
+        for item in self.children: 
+            if isinstance(item, Button): item.disabled = True # Check if item is a button
         await interaction.response.edit_message(view=self)
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red)
-    async def cancel_button(self, interaction: Interaction, button: Button):
+    async def cancel_button(self, interaction: discord.Interaction, button: Button): # Changed Interaction to discord.Interaction
         self.value = False; self.stop()
-        for item in self.children: item.disabled = True
+        for item in self.children: 
+            if isinstance(item, Button): item.disabled = True # Check if item is a button
         await interaction.response.edit_message(view=self)
 
 async def log_to_discord_channel(guild: discord.Guild, channel_type: str, embed: discord.Embed, content: Optional[str] = None):
     log_channel_id = get_guild_log_channel_id(guild.id, channel_type)
-    if not log_channel_id and channel_type != "main": # Fallback for specific logs if their channel isn't set
+    if not log_channel_id and channel_type != "main": 
         log_channel_id = get_guild_log_channel_id(guild.id, "main")
-        if log_channel_id: embed.set_footer(text=f"{embed.footer.text if embed.footer else ''} (Sent to main log: {channel_type} log channel not set)".strip())
+        if log_channel_id: embed.set_footer(text=f"{embed.footer.text if embed.footer and embed.footer.text else ''} (Sent to main log: {channel_type} log channel not set)".strip())
             
     if log_channel_id:
         log_channel = guild.get_channel(log_channel_id)
@@ -449,8 +456,9 @@ def add_infraction_record(guild_id: int, user_id: int, type: str, reason: str, m
     infractions_data[key].append(infraction_record); save_to_json(infractions_data, INFRACTIONS_FILE)
     return infraction_id
 
-def check_hierarchy(interaction: Interaction, target_member: Member) -> bool:
+def check_hierarchy(interaction: discord.Interaction, target_member: Member) -> bool: # Changed Interaction to discord.Interaction
     if interaction.user.id == target_member.id: raise HierarchyError("You cannot perform this action on yourself.")
+    if not isinstance(interaction.user, Member) : return False # Should not happen in guild commands
     if interaction.user.id == interaction.guild.owner_id: return True
     if target_member.id == interaction.guild.owner_id: raise HierarchyError("You cannot perform this action on the server owner.")
     if not interaction.user.guild_permissions.administrator and target_member.guild_permissions.administrator: raise HierarchyError("You cannot perform this action on an administrator if you are not one.")
@@ -467,7 +475,7 @@ async def on_ready():
     if RENDER_EXTERNAL_URL: print(f"INFO ({ARVO_BOT_NAME}): Website accessible via {RENDER_EXTERNAL_URL}")
     if not all([DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, FLASK_SECRET_KEY]): print(f"CRITICAL WARNING ({ARVO_BOT_NAME}): Core OAuth/Flask env vars missing.")
     
-    await bot.COMMAND_REGISTRY_READY.wait() # Wait for registry to be populated by setup_hook
+    await bot.COMMAND_REGISTRY_READY.wait() 
     for guild in bot.guilds: await sync_guild_commands(guild)
     
     print(f'{ARVO_BOT_NAME} is ready and online!')
@@ -486,7 +494,6 @@ async def sync_guild_commands(guild: discord.Guild):
     try:
         bot.tree.clear_commands(guild=guild)
         
-        # Add non-manageable core commands/groups
         bot.tree.add_command(arvo_config_group, guild=guild) 
         bot.tree.add_command(togglecommand_cmd, guild=guild)
         
@@ -502,23 +509,16 @@ async def sync_guild_commands(guild: discord.Guild):
                 parent_group_name = cmd_data.get("group_name")
                 if parent_group_name:
                     if parent_group_name not in added_groups_this_sync:
-                        # Dynamically get the group object from the bot's tree if already added by decorator
-                        # This assumes groups like infract_group are globally defined and added to bot.tree earlier
-                        # For simplicity, we assume the group objects are globally accessible by name here.
                         group_to_add = None
                         if parent_group_name == "infract": group_to_add = infract_group
                         elif parent_group_name == "staffmanage": group_to_add = staffmanage_group
                         elif parent_group_name == "staffinfract": group_to_add = staffinfract_group
                         
                         if group_to_add:
-                            try:
-                                bot.tree.add_command(group_to_add, guild=guild) # Add the whole group
-                                added_groups_this_sync.add(parent_group_name)
-                            except discord.app_commands.CommandAlreadyRegistered: pass # Group already added
+                            try: bot.tree.add_command(group_to_add, guild=guild); added_groups_this_sync.add(parent_group_name)
+                            except discord.app_commands.CommandAlreadyRegistered: pass 
                         else: print(f"WARNING: Could not find group object for {parent_group_name}")
-                    # Subcommands are part of the group, so adding the group handles them.
-                    # No need to add app_cmd_obj (subcommand) separately if its parent group is added.
-                else: # Top-level manageable command
+                else: 
                     bot.tree.add_command(app_cmd_obj, guild=guild)
         
         await bot.tree.sync(guild=guild)
@@ -535,12 +535,12 @@ staffinfract_group = Group(name="staffinfract", description="Staff infraction co
 # --- Utility Commands ---
 @bot.tree.command(name="ping", description=f"Check {ARVO_BOT_NAME}'s responsiveness.")
 @check_command_status_and_permission(permission_level=None)
-async def ping(interaction: discord.Interaction):
+async def ping(interaction: discord.Interaction): # Changed Interaction to discord.Interaction
     await interaction.response.send_message(f"{ARVO_BOT_NAME} Pong! 🏓 Latency: {bot.latency * 1000:.2f}ms", ephemeral=True)
 
 @bot.tree.command(name="arvohelp", description=f"Get information about {ARVO_BOT_NAME}.")
 @check_command_status_and_permission(permission_level=None)
-async def arvohelp(interaction: discord.Interaction):
+async def arvohelp(interaction: discord.Interaction): # Changed Interaction to discord.Interaction
     embed = Embed(title=f"{ARVO_BOT_NAME} - Smart Staff Management", description=ARVO_BOT_DESCRIPTION, color=Color.blue())
     embed.add_field(name="How to Use", value="Use slash commands. Manage settings via the dashboard.", inline=False)
     website_url = APP_BASE_URL_CONFIG if APP_BASE_URL_CONFIG else "https://arvobot.xyz" 
@@ -551,7 +551,7 @@ async def arvohelp(interaction: discord.Interaction):
 # --- Config Group Commands ---
 @arvo_config_group.command(name="setup", description=f"Get links to {ARVO_BOT_NAME}'s configuration dashboard.")
 @app_commands.checks.has_permissions(administrator=True) 
-async def arvo_config_setup(interaction: Interaction): # Renamed to avoid conflict
+async def arvo_config_setup(interaction: discord.Interaction): # Changed Interaction to discord.Interaction
     dashboard_link_base = APP_BASE_URL_CONFIG.rstrip('/') if APP_BASE_URL_CONFIG else None
     if not dashboard_link_base: await interaction.response.send_message("Dashboard link not available (APP_BASE_URL not set).", ephemeral=True); return
     db_link_servers = f"{dashboard_link_base}/dashboard/servers"
@@ -564,7 +564,7 @@ async def arvo_config_setup(interaction: Interaction): # Renamed to avoid confli
 @infract_group.command(name="warn", description="Warns a user.")
 @check_command_status_and_permission(permission_level="general_staff")
 @app_commands.describe(member="The member to warn.", reason="The reason for the warning.")
-async def infract_warn(interaction: Interaction, member: Member, reason: str):
+async def infract_warn(interaction: discord.Interaction, member: Member, reason: str): # Changed Interaction to discord.Interaction
     if not interaction.guild: return
     try: check_hierarchy(interaction, member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -574,7 +574,7 @@ async def infract_warn(interaction: Interaction, member: Member, reason: str):
     if view.value is True:
         inf_id = add_infraction_record(interaction.guild_id, member.id, "warn", reason, interaction.user.id, points=1)
         log_embed = Embed(title="User Warned", color=Color.gold(), timestamp=discord.utils.utcnow())
-        log_embed.set_author(name=f"Mod: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+        log_embed.set_author(name=f"Mod: {interaction.user}", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
         log_embed.add_field(name="User", value=f"{member.mention} ({member.id})", inline=False).add_field(name="Reason", value=reason, inline=False)
         log_embed.set_footer(text=f"Infraction ID: {inf_id} | Guild: {interaction.guild.name}")
         await log_to_discord_channel(interaction.guild, "main", log_embed)
@@ -587,7 +587,7 @@ async def infract_warn(interaction: Interaction, member: Member, reason: str):
 @infract_group.command(name="mute", description="Mutes a user for a specified number of hours.")
 @check_command_status_and_permission(permission_level="general_staff")
 @app_commands.describe(member="The member to mute.", hours="Duration in hours (1-672).", reason="The reason for the mute.")
-async def infract_mute(interaction: Interaction, member: Member, hours: app_commands.Range[int, 1, 672], reason: str):
+async def infract_mute(interaction: discord.Interaction, member: Member, hours: app_commands.Range[int, 1, 672], reason: str): # Changed Interaction to discord.Interaction
     if not interaction.guild: return
     try: check_hierarchy(interaction, member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -600,7 +600,7 @@ async def infract_mute(interaction: Interaction, member: Member, hours: app_comm
             await member.timeout(delta, reason=f"Muted by {interaction.user.name}: {reason}")
             inf_id = add_infraction_record(interaction.guild_id, member.id, "mute", reason, interaction.user.id, duration=dur_str, points=3)
             log_embed = Embed(title="User Muted", color=Color.orange(), timestamp=discord.utils.utcnow())
-            log_embed.set_author(name=f"Mod: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+            log_embed.set_author(name=f"Mod: {interaction.user}", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
             log_embed.add_field(name="User", value=f"{member.mention} ({member.id})", inline=False).add_field(name="Duration", value=dur_str, inline=True).add_field(name="Reason", value=reason, inline=False)
             log_embed.set_footer(text=f"Infraction ID: {inf_id} | Guild: {interaction.guild.name}")
             await log_to_discord_channel(interaction.guild, "main", log_embed)
@@ -615,7 +615,7 @@ async def infract_mute(interaction: Interaction, member: Member, hours: app_comm
 @infract_group.command(name="kick", description="Kicks a user from the server.")
 @check_command_status_and_permission(permission_level="general_staff")
 @app_commands.describe(member="The member to kick.", reason="The reason for the kick.")
-async def infract_kick(interaction: Interaction, member: Member, reason: str):
+async def infract_kick(interaction: discord.Interaction, member: Member, reason: str): # Changed Interaction to discord.Interaction
     if not interaction.guild: return
     try: check_hierarchy(interaction, member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -630,7 +630,7 @@ async def infract_kick(interaction: Interaction, member: Member, reason: str):
             await member.kick(reason=f"Kicked by {interaction.user.name}: {reason}")
             inf_id = add_infraction_record(interaction.guild_id, member.id, "kick", reason, interaction.user.id, points=5)
             log_embed = Embed(title="User Kicked", color=Color.dark_orange(), timestamp=discord.utils.utcnow())
-            log_embed.set_author(name=f"Mod: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+            log_embed.set_author(name=f"Mod: {interaction.user}", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
             log_embed.add_field(name="User", value=f"{member.display_name} ({member.id})", inline=False).add_field(name="Reason", value=reason, inline=False)
             log_embed.set_footer(text=f"Infraction ID: {inf_id} | Guild: {interaction.guild.name}")
             await log_to_discord_channel(interaction.guild, "main", log_embed)
@@ -643,7 +643,7 @@ async def infract_kick(interaction: Interaction, member: Member, reason: str):
 @infract_group.command(name="ban", description="Bans a user from the server.")
 @check_command_status_and_permission(permission_level="general_staff")
 @app_commands.describe(user="User to ban (ID if not in server).", reason="Reason for ban.", delete_message_days="Days of messages to delete (0-7).")
-async def infract_ban(interaction: Interaction, user: User, reason: str, delete_message_days: app_commands.Range[int, 0, 7] = 0):
+async def infract_ban(interaction: discord.Interaction, user: User, reason: str, delete_message_days: app_commands.Range[int, 0, 7] = 0): # Changed Interaction to discord.Interaction
     if not interaction.guild: return
     target_member = interaction.guild.get_member(user.id)
     if target_member:
@@ -660,7 +660,7 @@ async def infract_ban(interaction: Interaction, user: User, reason: str, delete_
             await interaction.guild.ban(user, reason=f"Banned by {interaction.user.name}: {reason}", delete_message_days=delete_message_days)
             inf_id = add_infraction_record(interaction.guild_id, user.id, "ban", reason, interaction.user.id, points=10)
             log_embed = Embed(title="User Banned", color=Color.red(), timestamp=discord.utils.utcnow())
-            log_embed.set_author(name=f"Mod: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+            log_embed.set_author(name=f"Mod: {interaction.user}", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
             log_embed.add_field(name="User", value=f"{user.mention} ({user.id})", inline=False).add_field(name="Reason", value=reason, inline=False).add_field(name="Msgs Deleted", value=f"{delete_message_days} days", inline=True)
             log_embed.set_footer(text=f"Infraction ID: {inf_id} | Guild: {interaction.guild.name}")
             await log_to_discord_channel(interaction.guild, "main", log_embed)
@@ -674,7 +674,7 @@ async def infract_ban(interaction: Interaction, user: User, reason: str, delete_
 @staffmanage_group.command(name="promote", description="Promotes a staff member and assigns a new role.")
 @check_command_status_and_permission(permission_level="high_rank_staff")
 @app_commands.describe(staff_member="Staff member to promote.", new_role="New role to assign.", reason="Reason for promotion.")
-async def staffmanage_promote(interaction: Interaction, staff_member: Member, new_role: Role, reason: str):
+async def staffmanage_promote(interaction: discord.Interaction, staff_member: Member, new_role: Role, reason: str): # Changed Interaction to discord.Interaction
     if not interaction.guild: return
     try: check_hierarchy(interaction, staff_member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -685,13 +685,13 @@ async def staffmanage_promote(interaction: Interaction, staff_member: Member, ne
         try:
             await staff_member.add_roles(new_role, reason=f"Promoted by {interaction.user.name}: {reason}")
             log_main = Embed(title="Staff Promoted (Log)", color=Color.teal(), timestamp=discord.utils.utcnow())
-            log_main.set_author(name=f"Manager: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+            log_main.set_author(name=f"Manager: {interaction.user}", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
             log_main.add_field(name="Staff", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="New Role", value=new_role.mention, inline=True).add_field(name="Reason", value=reason, inline=False)
             log_main.set_footer(text=f"Guild: {interaction.guild.name}")
             await log_to_discord_channel(interaction.guild, "main", log_main)
 
             promo_log = Embed(title="🎉 Staff Promotion 🎉", description="The Executive team has decided to promote you! Congratulations!", color=Color.gold(), timestamp=discord.utils.utcnow())
-            promo_log.set_author(name=staff_member.display_name, icon_url=staff_member.display_avatar.url)
+            promo_log.set_author(name=staff_member.display_name, icon_url=staff_member.display_avatar.url if staff_member.display_avatar else None)
             promo_log.add_field(name="Staff member:", value=staff_member.mention, inline=False).add_field(name="New Rank:", value=new_role.mention, inline=False).add_field(name="Reason:", value=reason, inline=False).add_field(name="Promoted by:", value=interaction.user.mention, inline=False)
             await log_to_discord_channel(interaction.guild, "promotion", promo_log, content=staff_member.mention)
             try: await staff_member.send(f"Congrats! You've been promoted in **{interaction.guild.name}** to **{new_role.name}**. Reason: {reason}\n*By: {interaction.user.mention}*")
@@ -705,7 +705,7 @@ async def staffmanage_promote(interaction: Interaction, staff_member: Member, ne
 @staffmanage_group.command(name="demote", description="Demotes a staff member and removes a role.")
 @check_command_status_and_permission(permission_level="high_rank_staff")
 @app_commands.describe(staff_member="Staff member to demote.", role_to_remove="Role to remove.", reason="Reason for demotion.")
-async def staffmanage_demote(interaction: Interaction, staff_member: Member, role_to_remove: Role, reason: str):
+async def staffmanage_demote(interaction: discord.Interaction, staff_member: Member, role_to_remove: Role, reason: str): # Changed Interaction to discord.Interaction
     if not interaction.guild: return
     try: check_hierarchy(interaction, staff_member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -717,7 +717,7 @@ async def staffmanage_demote(interaction: Interaction, staff_member: Member, rol
         try:
             await staff_member.remove_roles(role_to_remove, reason=f"Demoted by {interaction.user.name}: {reason}")
             log_main = Embed(title="Staff Demoted (Log)", color=Color.dark_gold(), timestamp=discord.utils.utcnow())
-            log_main.set_author(name=f"Manager: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+            log_main.set_author(name=f"Manager: {interaction.user}", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
             log_main.add_field(name="Staff", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="Role Removed", value=role_to_remove.mention, inline=True).add_field(name="Reason", value=reason, inline=False)
             log_main.set_footer(text=f"Guild: {interaction.guild.name}")
             await log_to_discord_channel(interaction.guild, "main", log_main)
@@ -732,7 +732,7 @@ async def staffmanage_demote(interaction: Interaction, staff_member: Member, rol
 @staffmanage_group.command(name="terminate", description="Logs staff termination. Manual role removal required.")
 @check_command_status_and_permission(permission_level="high_rank_staff")
 @app_commands.describe(staff_member="Staff member being terminated.", reason="Reason for termination.")
-async def staffmanage_terminate(interaction: Interaction, staff_member: Member, reason: str):
+async def staffmanage_terminate(interaction: discord.Interaction, staff_member: Member, reason: str): # Changed Interaction to discord.Interaction
     if not interaction.guild: return
     try: check_hierarchy(interaction, staff_member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -742,7 +742,7 @@ async def staffmanage_terminate(interaction: Interaction, staff_member: Member, 
     if view.value is True:
         inf_id = add_infraction_record(interaction.guild_id, staff_member.id, "staff_termination", reason, interaction.user.id, points=0)
         log_main = Embed(title="Staff Termination Logged", color=Color.dark_red(), timestamp=discord.utils.utcnow())
-        log_main.set_author(name=f"Manager: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+        log_main.set_author(name=f"Manager: {interaction.user}", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
         log_main.add_field(name="Staff", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="Reason", value=reason, inline=False).add_field(name="Action Required", value="Manually remove staff roles.", inline=False)
         log_main.set_footer(text=f"Termination Record ID: {inf_id} | Guild: {interaction.guild.name}")
         await log_to_discord_channel(interaction.guild, "main", log_main)
@@ -760,7 +760,7 @@ async def staffmanage_terminate(interaction: Interaction, staff_member: Member, 
 @staffinfract_group.command(name="warning", description="Issues an official warning to a staff member.")
 @check_command_status_and_permission(permission_level="high_rank_staff")
 @app_commands.describe(staff_member="Staff member to warn.", reason="Reason for staff warning.")
-async def staffinfract_warning(interaction: Interaction, staff_member: Member, reason: str):
+async def staffinfract_warning(interaction: discord.Interaction, staff_member: Member, reason: str): # Changed Interaction to discord.Interaction
     if not interaction.guild: return
     try: check_hierarchy(interaction, staff_member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -770,7 +770,7 @@ async def staffinfract_warning(interaction: Interaction, staff_member: Member, r
     if view.value is True:
         inf_id = add_infraction_record(interaction.guild_id, staff_member.id, "staff_warning", reason, interaction.user.id, points=1)
         log_main = Embed(title="Staff Warning Issued (Log)", color=Color.orange(), timestamp=discord.utils.utcnow())
-        log_main.set_author(name=f"Manager: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+        log_main.set_author(name=f"Manager: {interaction.user}", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
         log_main.add_field(name="Staff", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="Reason", value=reason, inline=False)
         log_main.set_footer(text=f"Infraction ID: {inf_id} | Guild: {interaction.guild.name}")
         await log_to_discord_channel(interaction.guild, "main", log_main)
@@ -787,7 +787,7 @@ async def staffinfract_warning(interaction: Interaction, staff_member: Member, r
 @staffinfract_group.command(name="strike", description="Issues a strike to a staff member.")
 @check_command_status_and_permission(permission_level="high_rank_staff")
 @app_commands.describe(staff_member="Staff member to issue a strike to.", reason="Reason for staff strike.")
-async def staffinfract_strike(interaction: Interaction, staff_member: Member, reason: str):
+async def staffinfract_strike(interaction: discord.Interaction, staff_member: Member, reason: str): # Changed Interaction to discord.Interaction
     if not interaction.guild: return
     try: check_hierarchy(interaction, staff_member)
     except HierarchyError as he: await interaction.response.send_message(str(he), ephemeral=True); return
@@ -797,7 +797,7 @@ async def staffinfract_strike(interaction: Interaction, staff_member: Member, re
     if view.value is True:
         inf_id = add_infraction_record(interaction.guild_id, staff_member.id, "staff_strike", reason, interaction.user.id, points=3)
         log_main = Embed(title="Staff Strike Issued (Log)", color=Color.red(), timestamp=discord.utils.utcnow())
-        log_main.set_author(name=f"Manager: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+        log_main.set_author(name=f"Manager: {interaction.user}", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
         log_main.add_field(name="Staff", value=f"{staff_member.mention} ({staff_member.id})", inline=False).add_field(name="Reason", value=reason, inline=False)
         log_main.set_footer(text=f"Infraction ID: {inf_id} | Guild: {interaction.guild.name}")
         await log_to_discord_channel(interaction.guild, "main", log_main)
@@ -815,7 +815,7 @@ async def staffinfract_strike(interaction: Interaction, staff_member: Member, re
 @bot.tree.command(name="viewinfractions", description="Views infractions for a given user.")
 @check_command_status_and_permission(permission_level="general_staff")
 @app_commands.describe(user="The user whose infractions you want to view.")
-async def viewinfractions(interaction: Interaction, user: User):
+async def viewinfractions(interaction: discord.Interaction, user: User): # Changed Interaction to discord.Interaction
     if not interaction.guild_id: return
     user_key = f"{interaction.guild_id}-{user.id}"; user_infractions = infractions_data.get(user_key, [])
     if not user_infractions: await interaction.response.send_message(f"{user.mention} has no recorded infractions.", ephemeral=True); return
@@ -846,10 +846,10 @@ async def viewinfractions(interaction: Interaction, user: User):
 @app_commands.checks.has_permissions(administrator=True) 
 @app_commands.guild_only()
 @app_commands.describe(command_name="The command to toggle.", enable="Set to True to enable, False to disable.")
-async def togglecommand_cmd(interaction: Interaction, command_name: str, enable: bool):
+async def togglecommand_cmd(interaction: discord.Interaction, command_name: str, enable: bool): # Changed Interaction to discord.Interaction
     if not interaction.guild_id: return
     guild_config = get_guild_config(interaction.guild_id)
-    if command_name not in ALL_CONFIGURABLE_COMMANDS_FLAT and command_name not in bot.COMMAND_REGISTRY: # Check against flat list from dashboard
+    if command_name not in ALL_CONFIGURABLE_COMMANDS_FLAT and command_name not in bot.COMMAND_REGISTRY: 
         await interaction.response.send_message(f"⚠️ Command `{command_name}` is not a known manageable command.", ephemeral=True); return
     current_status = guild_config["command_states"].get(command_name, True)
     if current_status == enable:
@@ -863,18 +863,18 @@ async def togglecommand_cmd(interaction: Interaction, command_name: str, enable:
     status_text = "enabled" if enable else "disabled"
     await interaction.response.send_message(f"✅ Command `{command_name}` has been {status_text}. Changes may take a moment.", ephemeral=True)
     log_embed = Embed(title="Command Toggled", color=Color.purple(), timestamp=discord.utils.utcnow())
-    log_embed.set_author(name=f"Admin: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+    log_embed.set_author(name=f"Admin: {interaction.user}", icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
     log_embed.add_field(name="Command", value=f"`/{command_name.replace('_',' ')}`", inline=True).add_field(name="New Status", value=status_text.title(), inline=True)
     log_embed.set_footer(text=f"Guild: {interaction.guild.name}")
     await log_to_discord_channel(interaction.guild, "main", log_embed)
 
 @togglecommand_cmd.autocomplete('command_name')
-async def togglecommand_autocomplete(interaction: Interaction, current: str) -> List[Choice[str]]:
+async def togglecommand_autocomplete(interaction: discord.Interaction, current: str) -> List[Choice[str]]: # Changed Interaction to discord.Interaction
     choices = [Choice(name=cmd_key.replace("_", " "), value=cmd_key) for cmd_key in ALL_CONFIGURABLE_COMMANDS_FLAT if current.lower() in cmd_key.lower()]
     return choices[:25]
 
 # --- Global Error Handler ---
-async def global_app_command_error_handler(interaction: discord.Interaction, error: app_commands.AppCommandError):
+async def global_app_command_error_handler(interaction: discord.Interaction, error: app_commands.AppCommandError): # Changed Interaction to discord.Interaction
     user_readable_error = "An unexpected error occurred. Please try again later."
     ephemeral_response = True
     if isinstance(error, (CommandDisabledInGuild, MissingConfiguredRole, HierarchyError)): user_readable_error = str(error)
@@ -894,25 +894,17 @@ bot.tree.on_error = global_app_command_error_handler
 # --- Setup Hook ---
 @bot.setup_hook
 async def initial_setup():
-    bot.COMMAND_REGISTRY_READY = asyncio.Event() # Event to signal registry is ready
-    
-    # Populate COMMAND_REGISTRY from defined commands
-    # This ensures app_command_obj is correctly linked for sync_guild_commands
-    # It relies on commands being defined before this hook is called.
-    # For grouped commands, the key will be "group_subcommand"
+    bot.COMMAND_REGISTRY_READY = asyncio.Event() 
     
     temp_registry = {}
     all_tree_commands = bot.tree.get_commands(type=discord.AppCommandType.chat_input)
 
     def process_command(cmd_obj, group_name=None):
         key = f"{group_name}_{cmd_obj.name}" if group_name else cmd_obj.name
-        # Determine if manageable based on ALL_CONFIGURABLE_COMMANDS_FLAT
-        # Or if it's a core non-toggleable command like togglecommand or arvo_config commands
         is_manageable = key in ALL_CONFIGURABLE_COMMANDS_FLAT
         
-        # Special handling for arvo_config_setup as it's under a group but not in ALL_CONFIGURABLE_COMMANDS_FLAT for toggling
-        if group_name == "arvo_config" and cmd_obj.name == "setup":
-            is_manageable = False # arvo_config_setup is not user-toggleable
+        if group_name == "arvo_config" and cmd_obj.name == "setup": # Corrected to arvo_config_group.name
+            is_manageable = False 
 
         temp_registry[key] = {
             "app_command_obj": cmd_obj,
@@ -923,7 +915,7 @@ async def initial_setup():
 
     for cmd in all_tree_commands:
         if isinstance(cmd, app_commands.Group):
-            for sub_cmd in cmd.commands: # Assuming one level of subcommand grouping
+            for sub_cmd in cmd.commands: 
                 if isinstance(sub_cmd, app_commands.Command):
                      process_command(sub_cmd, group_name=cmd.name)
         elif isinstance(cmd, app_commands.Command):
@@ -931,14 +923,13 @@ async def initial_setup():
             
     bot.COMMAND_REGISTRY = temp_registry
     print(f"INFO ({ARVO_BOT_NAME}): COMMAND_REGISTRY populated in setup_hook with {len(bot.COMMAND_REGISTRY)} entries.")
-    # print(f"DEBUG: Registry keys: {list(bot.COMMAND_REGISTRY.keys())}")
-    bot.COMMAND_REGISTRY_READY.set() # Signal that registry is ready
+    bot.COMMAND_REGISTRY_READY.set() 
 
 
 # --- Running the Bot and Server ---
 async def main_async():
-    async with bot: # bot context manager handles login/logout
-        # setup_hook (initial_setup) is called automatically by bot.start() before login
+    async with bot: 
+        # initial_setup is called by bot.start() via setup_hook
         start_keep_alive_server() 
         print(f"Flask web server thread started for {ARVO_BOT_NAME}.")
         print(f"Attempting to connect {ARVO_BOT_NAME} to Discord...")
@@ -948,7 +939,7 @@ if __name__ == "__main__":
     if not APP_BASE_URL_CONFIG: print(f"CRITICAL WARNING ({ARVO_BOT_NAME}): APP_BASE_URL or RENDER_EXTERNAL_URL env var not set.")
     if not DISCORD_CLIENT_ID or not DISCORD_CLIENT_SECRET: print(f"CRITICAL WARNING ({ARVO_BOT_NAME}): OAuth env vars not set.")
     
-    load_all_data() # Load data before starting anything
+    load_all_data() 
     
     try: asyncio.run(main_async())
     except KeyboardInterrupt: print(f"{ARVO_BOT_NAME} shutting down manually...")
