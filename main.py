@@ -166,7 +166,7 @@ def dashboard_servers():
         guilds_response = requests.get(f'{API_ENDPOINT}/users/@me/guilds', headers=headers); guilds_response.raise_for_status()
         user_guilds_data = guilds_response.json()
         for guild_data in user_guilds_data:
-            guild_id = int(guild_data['id']); bot_guild_instance = bot.get_guild(guild_id) # bot instance needs to be accessible
+            guild_id = int(guild_data['id']); bot_guild_instance = bot.get_guild(guild_id) 
             if bot_guild_instance:
                 user_perms_in_guild = discord.Permissions(int(guild_data['permissions']))
                 icon_hash = guild_data.get('icon'); icon_url = f"https://cdn.discordapp.com/icons/{guild_id}/{icon_hash}.png" if icon_hash else None
@@ -213,7 +213,7 @@ def dashboard_guild(guild_id_str: str):
     except Exception as e: print(f"Error re-fetching guilds for /dashboard/guild/{guild_id_str}: {e}"); flash("Error verifying server permissions.", "error"); return redirect(url_for('dashboard_servers')) 
     if not can_manage_this_guild: flash("You do not have permission to manage this server's Arvo settings.", "error"); return redirect(url_for('dashboard_servers'))
     
-    actual_guild_object = bot.get_guild(guild_id) # bot instance needs to be accessible
+    actual_guild_object = bot.get_guild(guild_id) 
     if not actual_guild_object: flash(f"{ARVO_BOT_NAME} is not in '{guild_name_for_dashboard}'. Please invite it first.", "error"); return redirect(url_for('dashboard_servers'))
 
     guild_config = get_guild_config(guild_id)
@@ -271,9 +271,9 @@ def save_command_settings(guild_id_str: str):
     
     if something_changed:
         async def do_sync():
-            target_guild = bot.get_guild(guild_id) # bot instance needs to be accessible
+            target_guild = bot.get_guild(guild_id) 
             if target_guild: await sync_guild_commands(target_guild)
-        if bot.loop: bot.loop.create_task(do_sync()) # bot instance needs to be accessible
+        if bot.loop: bot.loop.create_task(do_sync()) 
         flash('Command settings saved and sync initiated!', 'success')
     else:
         flash('No changes detected in command settings.', 'info')
@@ -285,7 +285,7 @@ def save_log_channel_settings(guild_id_str: str):
     try: guild_id = int(guild_id_str)
     except ValueError: abort(400, "Invalid Guild ID")
 
-    actual_guild_object = bot.get_guild(guild_id) # bot instance needs to be accessible
+    actual_guild_object = bot.get_guild(guild_id) 
     if not actual_guild_object: abort(404, "Bot not in guild or guild not found")
     user_discord_id = session.get('discord_user_id')
     if not user_discord_id: abort(403, "User session error.") 
@@ -313,7 +313,7 @@ def save_staff_role_settings(guild_id_str: str):
     try: guild_id = int(guild_id_str)
     except ValueError: abort(400, "Invalid Guild ID")
 
-    actual_guild_object = bot.get_guild(guild_id) # bot instance needs to be accessible
+    actual_guild_object = bot.get_guild(guild_id) 
     if not actual_guild_object: abort(404, "Bot not in guild or guild not found")
     user_discord_id = session.get('discord_user_id')
     if not user_discord_id: abort(403, "User session error.")
@@ -351,19 +351,20 @@ class ArvoBot(commands.Bot):
         super().__init__(*args, **kwargs)
         self.COMMAND_REGISTRY: Dict[str, Any] = {}
         self.COMMAND_REGISTRY_READY = asyncio.Event()
-        # self.loop is already defined in commands.Bot, ensure it's used consistently
-        # If Flask needs to schedule tasks on the bot's loop, ensure bot.loop is set before Flask thread starts if bot is not yet running.
-        # However, bot.loop is typically available after the bot object is created.
+        # self.loop is inherited from commands.Bot
 
-    async def setup_hook(self): # This is the correct way to define setup_hook
+    async def setup_hook(self): 
         temp_registry = {}
+        # Ensure all commands are defined before this hook runs
+        # This includes top-level commands and commands within groups
         all_tree_commands = self.tree.get_commands(type=discord.AppCommandType.chat_input)
 
         def process_command(cmd_obj, group_name=None):
             key = f"{group_name}_{cmd_obj.name}" if group_name else cmd_obj.name
             is_manageable = key in ALL_CONFIGURABLE_COMMANDS_FLAT
             
-            if group_name == "arvo_config" and cmd_obj.name == "setup": 
+            # Explicitly mark /arvo_config setup as not manageable by users for toggling
+            if group_name == arvo_config_group.name and cmd_obj.name == "setup": 
                 is_manageable = False 
 
             temp_registry[key] = {
@@ -374,11 +375,12 @@ class ArvoBot(commands.Bot):
             }
 
         for cmd in all_tree_commands:
-            if isinstance(cmd, app_commands.Group):
-                for sub_cmd in cmd.commands: 
-                    if isinstance(sub_cmd, app_commands.Command):
-                         process_command(sub_cmd, group_name=cmd.name)
-            elif isinstance(cmd, app_commands.Command):
+            if isinstance(cmd, app_commands.Group): # Check if it's one of our defined groups
+                if cmd.name in [arvo_config_group.name, infract_group.name, staffmanage_group.name, staffinfract_group.name]:
+                    for sub_cmd in cmd.commands: 
+                        if isinstance(sub_cmd, app_commands.Command):
+                             process_command(sub_cmd, group_name=cmd.name)
+            elif isinstance(cmd, app_commands.Command): # Top-level commands
                 process_command(cmd)
                 
         self.COMMAND_REGISTRY = temp_registry
@@ -390,7 +392,6 @@ intents = discord.Intents.default()
 intents.members = True 
 intents.message_content = True 
 bot = ArvoBot(command_prefix=commands.when_mentioned_or("!arvo-main-unused!"), intents=intents)
-# bot.loop is now an attribute of the ArvoBot instance.
 
 # --- Custom Check Exceptions ---
 class CommandDisabledInGuild(app_commands.CheckFailure):
@@ -505,7 +506,7 @@ def check_hierarchy(interaction: discord.Interaction, target_member: discord.Mem
 # --- Bot Event Listeners ---
 @bot.event
 async def on_ready():
-    # load_all_data() is now called at the end of the script before bot.run()
+    # load_all_data() is called at the end of the script before bot.run()
     print(f'{ARVO_BOT_NAME} has logged in as {bot.user.name} (ID: {bot.user.id})')
     print(f'Discord.py Version: {discord.__version__}')
     if RENDER_EXTERNAL_URL: print(f"INFO ({ARVO_BOT_NAME}): Website accessible via {RENDER_EXTERNAL_URL}")
@@ -930,7 +931,7 @@ bot.tree.on_error = global_app_command_error_handler
 # --- Running the Bot and Server ---
 async def main_async():
     async with bot: 
-        # The bot's setup_hook (ArvoBot.setup_hook) is called automatically by bot.start() before login
+        # The bot's setup_hook (ArvoBot.setup_hook) is called automatically by bot.start()
         start_keep_alive_server() 
         print(f"Flask web server thread started for {ARVO_BOT_NAME}.")
         print(f"Attempting to connect {ARVO_BOT_NAME} to Discord...")
@@ -940,7 +941,7 @@ if __name__ == "__main__":
     if not APP_BASE_URL_CONFIG: print(f"CRITICAL WARNING ({ARVO_BOT_NAME}): APP_BASE_URL or RENDER_EXTERNAL_URL env var not set.")
     if not DISCORD_CLIENT_ID or not DISCORD_CLIENT_SECRET: print(f"CRITICAL WARNING ({ARVO_BOT_NAME}): OAuth env vars not set.")
     
-    load_all_data() # Load data before starting anything
+    load_all_data() 
     
     try: asyncio.run(main_async())
     except KeyboardInterrupt: print(f"{ARVO_BOT_NAME} shutting down manually...")
