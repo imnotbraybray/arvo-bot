@@ -94,7 +94,7 @@ def get_guild_config(guild_id: int) -> Dict[str, Any]:
     updated = False
     for key, default_value in DEFAULT_GUILD_CONFIG.items():
         if key not in config:
-            config[key] = json.loads(json.dumps(default_value)) # Ensure mutable defaults are deep copied
+            config[key] = json.loads(json.dumps(default_value)) 
             updated = True
     if "command_states" not in config: config["command_states"] = {}; updated = True
     
@@ -188,7 +188,7 @@ COMMAND_CATEGORIES = {
         "staffinfract_warning", "staffinfract_strike", 
         "viewinfractions" 
     ],
-    "Configuration": ["arvo_config_setup"] # Renamed from "setup" to avoid conflict
+    "Configuration": ["arvo_config_setup"] 
 }
 ALL_CONFIGURABLE_COMMANDS_FLAT = [cmd for sublist in COMMAND_CATEGORIES.values() for cmd in sublist if cmd != "arvo_config_setup"]
 
@@ -218,7 +218,7 @@ def dashboard_guild(guild_id_str: str):
 
     guild_config = get_guild_config(guild_id)
     command_states = guild_config.get('command_enabled_states', {})
-    for cmd_name in ALL_CONFIGURABLE_COMMANDS_FLAT: # Ensure all commands have a default state
+    for cmd_name in ALL_CONFIGURABLE_COMMANDS_FLAT: 
         if cmd_name not in command_states: command_states[cmd_name] = True 
 
     guild_channels = [{'id': str(ch.id), 'name': ch.name} for ch in sorted(actual_guild_object.text_channels, key=lambda c: c.name) if ch.permissions_for(actual_guild_object.me).send_messages]
@@ -246,7 +246,6 @@ def save_command_settings(guild_id_str: str):
     try: guild_id = int(guild_id_str)
     except ValueError: abort(400, "Invalid Guild ID")
 
-    # Permission Check
     access_token = session.get('discord_oauth_token', {}).get('access_token')
     if not access_token: flash("Your session has expired.", "error"); return redirect(url_for('logout'))
     headers = {'Authorization': f'Bearer {access_token}'}
@@ -525,10 +524,10 @@ async def sync_guild_commands(guild: discord.Guild):
     except Exception as e: print(f"ERROR: Failed to sync commands for guild {guild.name}: {type(e).__name__} - {e}")
 
 # --- Command Groups ---
-arvo_config_group = app_commands.Group(name="arvo_config", description="Configure Arvo bot for this server.", guild_only=True) # Corrected Group
-infract_group = app_commands.Group(name="infract", description="User infraction management commands.", guild_only=True) # Corrected Group
-staffmanage_group = app_commands.Group(name="staffmanage", description="Staff management commands.", guild_only=True) # Corrected Group
-staffinfract_group = app_commands.Group(name="staffinfract", description="Staff infraction commands.", guild_only=True) # Corrected Group
+arvo_config_group = app_commands.Group(name="arvo_config", description="Configure Arvo bot for this server.", guild_only=True) 
+infract_group = app_commands.Group(name="infract", description="User infraction management commands.", guild_only=True) 
+staffmanage_group = app_commands.Group(name="staffmanage", description="Staff management commands.", guild_only=True) 
+staffinfract_group = app_commands.Group(name="staffinfract", description="Staff infraction commands.", guild_only=True) 
 
 # --- Utility Commands ---
 @bot.tree.command(name="ping", description=f"Check {ARVO_BOT_NAME}'s responsiveness.")
@@ -827,7 +826,7 @@ async def viewinfractions(interaction: discord.Interaction, user: discord.User):
         entry = (f"**ID:** `{infr['id']}`\n**Type:** {infr['type'].replace('_', ' ').title()}\n**Reason:** {infr['reason']}\n"
                  f"**Moderator:** {mod_display}\n**Date:** {formatted_ts}\n")
         if infr.get('duration'): entry += f"**Duration:** {infr['duration']}\n"
-        if infr.get('points'): entry += f"**Points:** {infr['points']}\n"; entry += "---\n" # Added points to the entry string
+        if infr.get('points'): entry += f"**Points:** {infr['points']}\n"; entry += "---\n" 
         if infr['type'].startswith("staff_"): staff_infractions_text += entry
         else: normal_infractions_text += entry
     if normal_infractions_text:
@@ -867,8 +866,8 @@ async def togglecommand_cmd(interaction: discord.Interaction, command_name: str,
     await log_to_discord_channel(interaction.guild, "main", log_embed)
 
 @togglecommand_cmd.autocomplete('command_name')
-async def togglecommand_autocomplete(interaction: discord.Interaction, current: str) -> List[Choice[str]]: 
-    choices = [Choice(name=cmd_key.replace("_", " "), value=cmd_key) for cmd_key in ALL_CONFIGURABLE_COMMANDS_FLAT if current.lower() in cmd_key.lower()]
+async def togglecommand_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]: # Corrected Choice
+    choices = [app_commands.Choice(name=cmd_key.replace("_", " "), value=cmd_key) for cmd_key in ALL_CONFIGURABLE_COMMANDS_FLAT if current.lower() in cmd_key.lower()] # Corrected Choice
     return choices[:25]
 
 # --- Global Error Handler ---
