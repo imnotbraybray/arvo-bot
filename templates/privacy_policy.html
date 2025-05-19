@@ -3,79 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Privacy Policy - Arvo Bot</title>
+    <title>Privacy Policy - {{ ARVO_BOT_NAME }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="{{ url_for('static', filename='images/arvo_logo.png') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/arvo_logo.png') }}">
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #1a202c; color: #e2e8f0; }
-        .container { max-width: 800px; margin: auto; background-color: #2d3748; padding: 2rem; border-radius: 0.5rem; margin-top: 2rem; margin-bottom: 2rem;}
-        h1, h2 { color: #f6e05e; }
+        .container { max-width: 800px; margin-left: auto; margin-right: auto; background-color: #2d3748; padding: 1rem; sm:padding: 2rem; border-radius: 0.5rem; margin-top: 2rem; margin-bottom: 2rem;}
+        h1 { font-size: 1.75rem; sm:font-size: 2rem; md:font-size: 2.25rem; color: #f6e05e; }
+        h2 { font-size: 1.25rem; sm:font-size: 1.5rem; md:font-size: 1.75rem; color: #f6e05e; }
+        p, ul li { font-size: 0.875rem; sm:font-size: 1rem; }
         a { color: #90cdf4; }
         a:hover { text-decoration: underline; }
         .nav-link { color: #f6e05e; text-decoration: none; font-weight: bold; display: inline-block; margin-bottom: 1.5rem;}
     </style>
 </head>
-<body class="antialiased leading-relaxed">
+<body class="antialiased leading-relaxed px-4 sm:px-0">
     <div class="container shadow-lg">
-        <a href="{{ url_for('index') }}" class="nav-link">&larr; Back to Home</a>
-        <h1 class="text-3xl font-bold mb-6">Privacy Policy for Arvo Bot</h1>
-        <p class="mb-2"><strong>Last Updated:</strong> May 18, 2025</p>
+        <a href="{{ url_for('index') }}" class="nav-link text-sm sm:text-base">&larr; Back to Home</a>
+        <h1 class="font-bold mb-6">Privacy Policy for {{ ARVO_BOT_NAME }}</h1>
+        <p class="mb-2 text-xs sm:text-sm"><strong>Last Updated:</strong> May 19, 2025</p>
 
-        <p class="mb-4">This Privacy Policy outlines how Arvo Bot ("Arvo", "we", "us", or "our") collects, uses, and safeguards your information when you add Arvo to your Discord server or interact with its services, including its associated website (arvobot.xyz).</p>
+        <p class="mb-4">This Privacy Policy outlines how {{ ARVO_BOT_NAME }} ("Arvo", "we", "us", or "our") collects, uses, and safeguards your information when you add Arvo to your Discord server or interact with its services, including its associated website (arvobot.xyz).</p>
 
-        <h2 class="text-2xl font-semibold mt-6 mb-3">1. Information We Collect</h2>
+        <h2 class="font-semibold mt-6 mb-3">1. Information We Collect</h2>
         <p class="mb-2">Arvo is designed to enhance server management and staff coordination. To provide its services, Arvo may collect and store the following types of information:</p>
         <ul class="list-disc list-inside mb-4 space-y-1 pl-4">
             <li><strong>Server Information:</strong> When Arvo is added to a Discord server, we store the server's ID (Guild ID) and name to identify it.</li>
-            <li><strong>Configuration Data:</strong> Settings configured by server administrators via the <code>/setup</code> command, such as the designated log channel ID and command-specific role permissions, are stored on a per-server basis.</li>
-            <li><strong>User Information (for commands):</strong> When you interact with Arvo's commands (e.g., submitting a form like bus assignments, or using setup commands), we collect your Discord User ID and username/tag to attribute actions, for logging purposes, and to facilitate command functionality (like DMing you).</li>
-            <li><strong>Data Submitted Through Forms:</strong> Information you voluntarily provide when using Arvo's form-based commands (e.g., staff reports, bus assignments) is collected and stored to be logged in the configured channel and potentially viewed via the authenticated web interface.</li>
-            <li><strong>Web View Authentication Data:</strong> If you log in to the Arvo web view (arvobot.xyz) using Discord OAuth2, we receive your Discord User ID, username, and a list of guilds you are in. This is used solely to verify your identity and check if you have the required role in the target server to view protected content. Access tokens from OAuth2 are stored in your browser's session and are not persistently stored by Arvo long-term for this purpose.</li>
-            <li><strong>Bot Operational Logs:</strong> Arvo may log errors, command usage statistics (anonymized where possible), and other operational data to maintain and improve its services. These logs do not typically contain personal message content unless it's part of a form submission.</li>
+            <li><strong>Configuration Data:</strong> Settings configured by server administrators via the dashboard or commands, such as designated log channel IDs, staff roles, and command enabled/disabled states, are stored on a per-server basis.</li>
+            <li><strong>User Information (for commands):</strong> When you interact with Arvo's commands, we collect your Discord User ID and username/tag to attribute actions, for logging purposes, and to facilitate command functionality.</li>
+            <li><strong>Infraction Data:</strong> Details of infractions (warnings, mutes, kicks, bans, staff infractions) including the target user, moderator, reason, type, and timestamp are stored.</li>
+            <li><strong>Web Dashboard Authentication Data:</strong> If you log in to the Arvo web dashboard using Discord OAuth2, we receive your Discord User ID, username, and a list of guilds you are in. This is used solely to verify your identity and permissions. Access tokens are stored in your browser's session.</li>
+            <li><strong>Bot Operational Logs:</strong> Arvo may log errors, command usage statistics (anonymized where possible), and other operational data to maintain and improve its services.</li>
         </ul>
-        <p class="mb-4">Arvo does **not** routinely log or store the content of general user messages in your server channels, outside of specific data submitted through its commands or forms.</p>
+        <p class="mb-4">{{ ARVO_BOT_NAME }} does **not** routinely log or store the content of general user messages in your server channels, outside of specific data submitted through its commands (e.g., infraction reasons).</p>
 
-        <h2 class="text-2xl font-semibold mt-6 mb-3">2. How We Use Your Information</h2>
+        <h2 class="font-semibold mt-6 mb-3">2. How We Use Your Information</h2>
         <p class="mb-2">The information collected is used for the following purposes:</p>
         <ul class="list-disc list-inside mb-4 space-y-1 pl-4">
-            <li>To provide, operate, and maintain Arvo's features and functionalities within your Discord server.</li>
-            <li>To store and apply server-specific configurations as set by administrators.</li>
-            <li>To log actions and form submissions to designated channels within your server.</li>
-            <li>To authenticate authorized personnel for accessing specific data via the Arvo web view.</li>
-            <li>To monitor bot performance, diagnose issues, and improve Arvo's services.</li>
-            <li>To respond to your support requests or inquiries.</li>
+            <li>To provide, operate, and maintain Arvo's features and functionalities.</li>
+            <li>To store and apply server-specific configurations.</li>
+            <li>To log actions and infractions to designated channels and for record-keeping.</li>
+            <li>To authenticate authorized personnel for accessing the web dashboard.</li>
+            <li>To monitor bot performance, diagnose issues, and improve services.</li>
+            <li>To respond to support requests.</li>
         </ul>
 
-        <h2 class="text-2xl font-semibold mt-6 mb-3">3. Data Storage and Security</h2>
-        <p class="mb-2">Server configurations (like log channel IDs and command permissions) and data from form submissions are currently stored in an **in-memory database** while the bot is operational. This means that if the bot restarts (e.g., due to an update or a hosting issue), this specific data may be lost unless a persistent storage solution is implemented in the future.</p>
-        <p class="mb-4">We take reasonable measures to protect the information we handle, but no online service can be 100% secure. The bot operates using the Discord API and is hosted on Render, which have their own security measures.</p>
+        <h2 class="font-semibold mt-6 mb-3">3. Data Storage and Security</h2>
+        <p class="mb-2">Server configurations and infraction data are stored in JSON files on the server where the bot is hosted. We take reasonable measures to protect this information, but no online service can be 100% secure. The bot operates using the Discord API and is hosted on a platform (e.g., Render) which has its own security measures.</p>
         
-        <h2 class="text-2xl font-semibold mt-6 mb-3">4. Data Sharing and Third Parties</h2>
-        <p class="mb-2">We do not sell, trade, or rent your personal identification information or server-specific configuration data to others.</p>
+        <h2 class="font-semibold mt-6 mb-3">4. Data Sharing and Third Parties</h2>
+        <p class="mb-2">We do not sell, trade, or rent your personal identification information or server-specific data to others.</p>
         <p class="mb-4">Arvo interacts with the following third-party services:</p>
         <ul class="list-disc list-inside mb-4 space-y-1 pl-4">
-            <li><strong>Discord API:</strong> Essential for the bot's operation. Arvo's use of the Discord API is subject to Discord's Developer Terms of Service and Privacy Policy.</li>
-            <li><strong>Render (Hosting):</strong> Arvo is hosted on Render. Render's privacy policy applies to the data processed on their platform.</li>
+            <li><strong>Discord API:</strong> Essential for the bot's operation.</li>
+            <li><strong>Hosting Platform (e.g., Render):</strong> Where the bot and its data files are stored.</li>
         </ul>
 
-        <h2 class="text-2xl font-semibold mt-6 mb-3">5. User Rights and Data Control</h2>
-        <p class="mb-2">As a Discord bot, much of the data control resides within Discord itself and your server settings:</p>
+        <h2 class="font-semibold mt-6 mb-3">5. User Rights and Data Control</h2>
+        <p class="mb-2">Data control largely resides within Discord and your server settings:</p>
         <ul class="list-disc list-inside mb-4 space-y-1 pl-4">
-            <li>You can remove Arvo from your server at any time, which will stop further data collection for that server.</li>
-            <li>Server administrators can manage Arvo's permissions within their server.</li>
-            <li>Data logged by Arvo to your server channels can be managed (e.g., deleted) by users with appropriate Discord permissions in those channels.</li>
-            <li>For data related to your web view login session, you can log out via the website.</li>
+            <li>You can remove Arvo from your server at any time.</li>
+            <li>Server administrators can manage Arvo's permissions.</li>
+            <li>Data logged by Arvo to your server channels can be managed by users with appropriate Discord permissions.</li>
+            <li>To request deletion of stored configuration or infraction data for your server, please contact us through the support server.</li>
         </ul>
-        <p class.mb-4">Due to the current in-memory storage for configurations and form submissions, specific data deletion requests for this transient data are not applicable in the same way as with persistent databases. If persistent storage is implemented, this section will be updated.</p>
+       
+        <h2 class="font-semibold mt-6 mb-3">6. Children's Privacy</h2>
+        <p class="mb-4">{{ ARVO_BOT_NAME }} is not intended for use by individuals under the age of 13 (or the relevant age of digital consent in your country). We do not knowingly collect personal information from children.</p>
 
-        <h2 class="text-2xl font-semibold mt-6 mb-3">6. Children's Privacy</h2>
-        <p class="mb-4">Arvo is not intended for use by individuals under the age of 13 (or the relevant age of digital consent in your country). We do not knowingly collect personal information from children.</p>
+        <h2 class="font-semibold mt-6 mb-3">7. Changes to This Privacy Policy</h2>
+        <p class="mb-4">We may update this Privacy Policy. We will notify you of significant changes via our support server or other appropriate channels. Your continued use of Arvo after such changes constitutes your acceptance of the new Privacy Policy.</p>
 
-        <h2 class="text-2xl font-semibold mt-6 mb-3">7. Changes to This Privacy Policy</h2>
-        <p class="mb-4">We may update this Privacy Policy from time to time. We will notify you of any significant changes by announcing them in our support server or through other appropriate channels. Your continued use of Arvo after such changes constitutes your acceptance of the new Privacy Policy.</p>
-
-        <h2 class="text-2xl font-semibold mt-6 mb-3">8. Contact Us</h2>
-        <p class="mb-4">If you have any questions about this Privacy Policy or Arvo's practices, please contact us via our official support server: [Link to your support server, e.g., https://discord.gg/xr7NjKQjDy]</p>
+        <h2 class="font-semibold mt-6 mb-3">8. Contact Us</h2>
+        <p class="mb-4">If you have any questions about this Privacy Policy or Arvo's practices, please contact us via our official support server: [Link to your support server, e.g., https://discord.gg/YOUR_SUPPORT_SERVER_INVITE]</p>
     </div>
 </body>
 </html>
