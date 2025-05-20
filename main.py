@@ -249,7 +249,7 @@ def save_command_settings(guild_id_str: str):
     if something_changed: 
         async def do_sync():
             target_guild = bot.get_guild(guild_id) 
-            if target_guild: await sync_guild_commands(target_guild, force_all_on=True) # Pass force_all_on
+            if target_guild: await sync_guild_commands(target_guild, force_all_on=True) # MODIFIED: Pass force_all_on=True for testing
         if bot.loop: bot.loop.create_task(do_sync()) 
         flash('Command settings saved! (All commands currently force-enabled for testing).', 'success')
     else:
@@ -369,13 +369,13 @@ def is_high_rank_staff(interaction: discord.Interaction) -> bool:
     if not high_rank_role_id: return False 
     return any(role.id == high_rank_role_id for role in interaction.user.roles)
 
-def check_command_status_and_permission(permission_level: Optional[str] = "general_staff", force_all_on_for_testing: bool = False): # Default force_all_on to False
+def check_command_status_and_permission(permission_level: Optional[str] = "general_staff", force_all_on_for_testing: bool = False): 
     async def predicate(interaction: discord.Interaction) -> bool: 
         if not interaction.guild_id: return True 
         cmd_obj = interaction.command; command_name_key = cmd_obj.name
         if cmd_obj.parent: command_name_key = f"{cmd_obj.parent.name}_{cmd_obj.name}"
         
-        if not force_all_on_for_testing: # Only check enabled state if not forcing all on
+        if not force_all_on_for_testing: 
             if not is_command_enabled_for_guild(interaction.guild_id, command_name_key):
                 raise CommandDisabledInGuild(command_name_key)
 
@@ -396,7 +396,7 @@ def check_command_status_and_permission(permission_level: Optional[str] = "gener
         return True
     return app_commands.check(predicate)
 
-# --- Confirmation View, Logging, Infractions, Hierarchy (Same as previous version) ---
+# --- Confirmation View, Logging, Infractions, Hierarchy ---
 class ConfirmationView(View):
     def __init__(self, author_id: int):
         super().__init__(timeout=60.0); self.value = None; self.author_id = author_id
@@ -437,13 +437,15 @@ def add_infraction_record(guild_id: int, user_id: int, type: str, reason: str, m
     return infraction_id
 
 def check_hierarchy(interaction: discord.Interaction, target_member: discord.Member) -> bool: 
-    if interaction.user.id == target_member.id: raise HierarchyError("You cannot perform this action on yourself.")
+    # Allow running commands on oneself for testing
+    # if interaction.user.id == target_member.id: raise HierarchyError("You cannot perform this action on yourself.")
     if not isinstance(interaction.user, discord.Member) : return False 
-    if interaction.user.id == interaction.guild.owner_id: return True
+    if interaction.user.id == interaction.guild.owner_id and interaction.user.id != target_member.id : return True # Owner can action anyone but themselves (if self-action is disallowed elsewhere)
     if target_member.id == interaction.guild.owner_id: raise HierarchyError("You cannot perform this action on the server owner.")
     if not interaction.user.guild_permissions.administrator and target_member.guild_permissions.administrator: raise HierarchyError("You cannot perform this action on an administrator if you are not one.")
     if isinstance(interaction.user, discord.Member) and isinstance(target_member, discord.Member): 
-        if interaction.user.top_role <= target_member.top_role: raise HierarchyError("You cannot perform this action on a member with an equal or higher role.")
+        if interaction.user.id != target_member.id and interaction.user.top_role <= target_member.top_role : # Add check to not compare against self here if self-action is allowed
+            raise HierarchyError("You cannot perform this action on a member with an equal or higher role.")
     return True
 
 # --- Bot Event Listeners ---
@@ -454,7 +456,7 @@ async def on_ready():
     if RENDER_EXTERNAL_URL: print(f"INFO ({ARVO_BOT_NAME}): Website accessible via {RENDER_EXTERNAL_URL}")
     if not all([DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, FLASK_SECRET_KEY]): print(f"CRITICAL WARNING ({ARVO_BOT_NAME}): Core OAuth/Flask env vars missing.")
     await bot.COMMAND_REGISTRY_READY.wait() 
-    for guild in bot.guilds: await sync_guild_commands(guild, force_all_on=True) # FORCE ALL ON FOR TESTING
+    for guild in bot.guilds: await sync_guild_commands(guild, force_all_on=True) 
     print(f'{ARVO_BOT_NAME} is ready and online!')
     await bot.change_presence(activity=discord.Game(name=f"/arvohelp | {ARVO_BOT_NAME}"))
 
@@ -463,11 +465,10 @@ async def on_guild_join(guild: discord.Guild):
     print(f"INFO: Joined new guild: {guild.name} (ID: {guild.id})")
     get_guild_config(guild.id) 
     await bot.COMMAND_REGISTRY_READY.wait()
-    await sync_guild_commands(guild, force_all_on=True) # FORCE ALL ON FOR TESTING
+    await sync_guild_commands(guild, force_all_on=True) 
 
 async def sync_guild_commands(guild: discord.Guild, force_all_on: bool = False):
     print(f"INFO: Syncing commands for guild: {guild.name} ({guild.id}). Force all on: {force_all_on}")
-    guild_config = get_guild_config(guild.id)
     try:
         bot.tree.clear_commands(guild=guild)
         
@@ -478,15 +479,21 @@ async def sync_guild_commands(guild: discord.Guild, force_all_on: bool = False):
         # Add manageable groups and top-level commands
         if force_all_on:
             print(f"DEBUG: Forcing all manageable commands ON for guild {guild.name}")
-            bot.tree.add_command(infract_group, guild=guild)
-            bot.tree.add_command(staffmanage_group, guild=guild)
-            bot.tree.add_command(staffinfract_group, guild=guild)
-            # Add top-level manageable commands from registry if they are not part of these groups
+            # Explicitly add each defined group
+            try: bot.tree.add_command(infract_group, guild=guild)
+            except discord.app_commands.CommandAlreadyRegistered: pass
+            try: bot.tree.add_command(staffmanage_group, guild=guild)
+            except discord.app_commands.CommandAlreadyRegistered: pass
+            try: bot.tree.add_command(staffinfract_group, guild=guild)
+            except discord.app_commands.CommandAlreadyRegistered: pass
+            
+            # Add top-level manageable commands from registry
             for cmd_key, cmd_data in bot.COMMAND_REGISTRY.items():
                 if cmd_data.get("manageable") and not cmd_data.get("group_name") and cmd_data.get("app_command_obj"):
                     try: bot.tree.add_command(cmd_data["app_command_obj"], guild=guild)
-                    except discord.app_commands.CommandAlreadyRegistered: pass # Might happen if already added via group
-        else: # Respect guild_config (future state)
+                    except discord.app_commands.CommandAlreadyRegistered: pass
+        else: # Respect guild_config (future state when force_all_on is False)
+            guild_config = get_guild_config(guild.id)
             added_groups_this_sync = set()
             for cmd_key, cmd_data in bot.COMMAND_REGISTRY.items():
                 if not cmd_data.get("manageable", True): continue
