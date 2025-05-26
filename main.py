@@ -1,8 +1,8 @@
 # main.py (for Main Arvo Bot - serving arvobot.xyz AND dash.arvobot.xyz)
 import discord
 from discord.ext import commands
-from discord import app_commands, ChannelType, Role, SelectOption, Embed, Color, Member, User, Interaction, CategoryChannel, TextChannel, ButtonStyle, File, PermissionOverwrite
-from discord.ui import View, Button, Modal, TextInput 
+from discord import app_commands, ChannelType, Role, SelectOption, Embed, Color, Member, User, Interaction, CategoryChannel, TextChannel, ButtonStyle, File, PermissionOverwrite, SelectMenu # Added SelectMenu
+from discord.ui import View, Button, Modal, TextInput, UserSelect # Added UserSelect
 import os
 from flask import Flask, render_template, url_for, session, redirect, request, flash, abort 
 from threading import Thread
@@ -91,41 +91,12 @@ def load_all_data():
     active_tickets_data = {int(k): {int(ch_id): ticket_info for ch_id, ticket_info in v.items()} for k, v in raw_active_tickets.items()}
     print(f"INFO ({ARVO_BOT_NAME}): All data loaded from JSON files.")
 
-def get_guild_config(guild_id: int) -> Dict[str, Any]:
-    if guild_id not in guild_configurations:
-        guild_configurations[guild_id] = json.loads(json.dumps(DEFAULT_GUILD_CONFIG))
-        guild_configurations[guild_id]["command_states"] = {
-            cmd_key: True for cmd_key in ALL_CONFIGURABLE_COMMANDS_FLAT 
-        }
-        save_to_json(guild_configurations, CONFIG_FILE)
-        print(f"INFO: Created default config for guild {guild_id}")
-    
-    config = guild_configurations[guild_id]
-    updated = False
-    for key, default_value in DEFAULT_GUILD_CONFIG.items():
-        if key not in config:
-            config[key] = json.loads(json.dumps(default_value)) 
-            updated = True
-    if "command_states" not in config: config["command_states"] = {}; updated = True
-    
-    for cmd_key in ALL_CONFIGURABLE_COMMANDS_FLAT:
-        if cmd_key not in config["command_states"]:
-            config["command_states"][cmd_key] = True; updated = True
-            
-    if updated: save_to_json(guild_configurations, CONFIG_FILE)
-    return config
-
-def get_guild_log_channel_id(guild_id: int, log_type: str = "main") -> Optional[int]:
-    config = get_guild_config(guild_id)
-    if log_type == "main": return config.get('log_channel_id')
-    elif log_type == "promotion": return config.get('promotion_log_channel_id')
-    elif log_type == "staff_infraction": return config.get('staff_infraction_log_channel_id')
-    return None
-
+# ... (Flask App and existing bot helper functions like get_guild_config, log_to_discord_channel, etc. remain mostly the same)
+# ... (Ensure bot instance is accessible to Flask routes for fetching guild channels/roles)
 # --- Flask App (Routes are the same, content omitted for brevity) ---
 app = Flask(__name__) 
 app.secret_key = FLASK_SECRET_KEY
-# ... (All Flask routes from previous version)
+# ... (All Flask routes from previous version: /, /privacy-policy, /terms-and-conditions, /keep-alive, /login, /callback, /logout, /dashboard, /dashboard/servers, /dashboard/guild/<guild_id_str>, /dashboard/guild/<guild_id_str>/save_command_settings, etc.)
 @app.route('/')
 def index(): return render_template('index.html', ARVO_BOT_NAME=ARVO_BOT_NAME)
 @app.route('/privacy-policy')
@@ -337,10 +308,8 @@ class ArvoBot(commands.Bot):
         super().__init__(*args, **kwargs)
         self.COMMAND_REGISTRY: Dict[str, Any] = {}
         self.COMMAND_REGISTRY_READY = asyncio.Event()
-        # No need to define group attributes here if they are global
 
     async def setup_hook(self): 
-        # Add globally defined groups to the tree
         self.tree.add_command(arvo_config_group)
         self.tree.add_command(infract_group)
         self.tree.add_command(staffmanage_group)
@@ -567,7 +536,7 @@ async def arvohelp(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # --- Config Group Commands ---
-@arvo_config_group.command(name="setup", description=f"Get links to {ARVO_BOT_NAME}'s configuration dashboard.") # Uses global arvo_config_group
+@arvo_config_group.command(name="setup", description=f"Get links to {ARVO_BOT_NAME}'s configuration dashboard.") 
 @app_commands.checks.has_permissions(administrator=True) 
 async def arvo_config_setup(interaction: discord.Interaction): 
     dashboard_link_base = APP_BASE_URL_CONFIG.rstrip('/') if APP_BASE_URL_CONFIG else None
@@ -579,7 +548,7 @@ async def arvo_config_setup(interaction: discord.Interaction):
     await interaction.response.send_message(msg, ephemeral=True)
 
 # --- Infraction Commands ---
-@infract_group.command(name="warn", description="Warns a user.") # Uses global infract_group
+@infract_group.command(name="warn", description="Warns a user.") 
 @check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(member="The member to warn.", reason="The reason for the warning.")
 async def infract_warn(interaction: discord.Interaction, member: discord.Member, reason: str): 
@@ -875,12 +844,12 @@ class TicketPanelSetupModal(Modal, title="Create/Edit Ticket Panel"):
         }
         await interaction.response.send_message(f"Placeholder: Panel '{self.panel_internal_name.value}' setup initiated. More steps needed for full config.", ephemeral=True)
 
-@tickets_group.command(name="setup", description="Setup or manage ticket panels for this server.") # Uses global tickets_group
+@tickets_group.command(name="setup", description="Setup or manage ticket panels for this server.") 
 @check_command_status_and_permission(permission_level="admin_only", force_all_on_for_testing=True) 
 async def tickets_setup(interaction: discord.Interaction):
     await interaction.response.send_modal(TicketPanelSetupModal())
 
-@tickets_group.command(name="useradd", description="Adds a user to the current ticket channel.") # Uses global tickets_group
+@tickets_group.command(name="useradd", description="Adds a user to the current ticket channel.") 
 @check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True) 
 @app_commands.describe(user="The user to add to this ticket.")
 async def tickets_useradd(interaction: discord.Interaction, user: discord.Member):
