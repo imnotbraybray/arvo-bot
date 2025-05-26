@@ -2,7 +2,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands, ChannelType, Role, SelectOption, Embed, Color, Member, User, Interaction, CategoryChannel, TextChannel, ButtonStyle, File, PermissionOverwrite
-from discord.ui import View, Button, Modal, TextInput # Removed ChannelSelect, RoleSelect, Select for now, will re-add as needed for modals
+from discord.ui import View, Button, Modal, TextInput 
 import os
 from flask import Flask, render_template, url_for, session, redirect, request, flash, abort 
 from threading import Thread
@@ -58,8 +58,8 @@ DEFAULT_GUILD_CONFIG = {
 # --- Data Storage ---
 guild_configurations: Dict[int, Dict[str, Any]] = {} 
 infractions_data: Dict[str, List[Dict[str, Any]]] = {} 
-ticket_panels_data: Dict[int, List[Dict[str, Any]]] = {} # Guild ID -> List of Panel Configs
-active_tickets_data: Dict[int, Dict[int, Dict[str, Any]]] = {} # Guild ID -> {Channel ID -> Ticket Info}
+ticket_panels_data: Dict[int, List[Dict[str, Any]]] = {} 
+active_tickets_data: Dict[int, Dict[int, Dict[str, Any]]] = {} 
 
 def load_from_json(filename: str, default_data: Any = None) -> Any:
     if default_data is None: default_data = {}
@@ -91,8 +91,37 @@ def load_all_data():
     active_tickets_data = {int(k): {int(ch_id): ticket_info for ch_id, ticket_info in v.items()} for k, v in raw_active_tickets.items()}
     print(f"INFO ({ARVO_BOT_NAME}): All data loaded from JSON files.")
 
-# ... (Flask App and existing bot helper functions like get_guild_config, log_to_discord_channel, etc. remain mostly the same)
-# ... (Ensure bot instance is accessible to Flask routes for fetching guild channels/roles)
+def get_guild_config(guild_id: int) -> Dict[str, Any]:
+    if guild_id not in guild_configurations:
+        guild_configurations[guild_id] = json.loads(json.dumps(DEFAULT_GUILD_CONFIG))
+        guild_configurations[guild_id]["command_states"] = {
+            cmd_key: True for cmd_key in ALL_CONFIGURABLE_COMMANDS_FLAT 
+        }
+        save_to_json(guild_configurations, CONFIG_FILE)
+        print(f"INFO: Created default config for guild {guild_id}")
+    
+    config = guild_configurations[guild_id]
+    updated = False
+    for key, default_value in DEFAULT_GUILD_CONFIG.items():
+        if key not in config:
+            config[key] = json.loads(json.dumps(default_value)) 
+            updated = True
+    if "command_states" not in config: config["command_states"] = {}; updated = True
+    
+    for cmd_key in ALL_CONFIGURABLE_COMMANDS_FLAT:
+        if cmd_key not in config["command_states"]:
+            config["command_states"][cmd_key] = True; updated = True
+            
+    if updated: save_to_json(guild_configurations, CONFIG_FILE)
+    return config
+
+def get_guild_log_channel_id(guild_id: int, log_type: str = "main") -> Optional[int]:
+    config = get_guild_config(guild_id)
+    if log_type == "main": return config.get('log_channel_id')
+    elif log_type == "promotion": return config.get('promotion_log_channel_id')
+    elif log_type == "staff_infraction": return config.get('staff_infraction_log_channel_id')
+    return None
+
 # --- Flask App (Routes are the same, content omitted for brevity) ---
 app = Flask(__name__) 
 app.secret_key = FLASK_SECRET_KEY
@@ -301,49 +330,42 @@ class ArvoBot(commands.Bot):
         super().__init__(*args, **kwargs)
         self.COMMAND_REGISTRY: Dict[str, Any] = {}
         self.COMMAND_REGISTRY_READY = asyncio.Event()
-        # Command groups will be initialized in setup_hook before commands are added to them
         self.arvo_config_group: Optional[app_commands.Group] = None
         self.infract_group: Optional[app_commands.Group] = None
         self.staffmanage_group: Optional[app_commands.Group] = None
         self.staffinfract_group: Optional[app_commands.Group] = None
         self.tickets_group: Optional[app_commands.Group] = None
 
-
     async def setup_hook(self): 
-        # Define command groups as instance attributes
         self.arvo_config_group = app_commands.Group(name="arvo_config", description="Configure Arvo bot for this server.", guild_only=True)
         self.infract_group = app_commands.Group(name="infract", description="User infraction management commands.", guild_only=True)
         self.staffmanage_group = app_commands.Group(name="staffmanage", description="Staff management commands.", guild_only=True)
         self.staffinfract_group = app_commands.Group(name="staffinfract", description="Staff infraction commands.", guild_only=True)
         self.tickets_group = app_commands.Group(name="tickets", description="Ticket system commands.", guild_only=True)
 
-        # Add groups to the tree FIRST
         self.tree.add_command(self.arvo_config_group)
         self.tree.add_command(self.infract_group)
         self.tree.add_command(self.staffmanage_group)
         self.tree.add_command(self.staffinfract_group)
         self.tree.add_command(self.tickets_group)
-
-        # Now that groups are on the tree, commands decorated with @bot.<group_name>.command will register correctly.
-        # The COMMAND_REGISTRY population will happen after all commands are implicitly added.
-        # We need a way to ensure that all command definitions (global and grouped) have run
-        # before we try to populate COMMAND_REGISTRY from self.tree.get_commands().
-        # This is usually handled by discord.py's loading mechanism.
-        # For a single file, it means all @bot.tree.command and @group.command decorators should have executed.
         
-        # It's safer to populate COMMAND_REGISTRY after bot is fully ready and commands are loaded.
-        # However, sync_guild_commands might be called before on_ready if bot reconnects quickly.
-        # Let's populate it here, assuming decorators have run.
-        # This is a common pattern: define commands, then in setup_hook, process them.
-
+        # Commands will be added to these groups using decorators like @bot.infract_group.command()
+        # After all commands are defined and decorated, this setup_hook will populate the COMMAND_REGISTRY
+        # by inspecting self.tree.
+        
+        # It's important that command definitions (decorators) run before this setup_hook completes
+        # if we are to build the registry from the tree.
+        # For a single file, this order is usually fine.
+        
+        # Delay COMMAND_REGISTRY population slightly to ensure all decorators have run
+        await asyncio.sleep(0.1) # Small delay, might not be strictly necessary but can help
+        
         temp_registry = {}
         all_tree_commands = self.tree.get_commands(type=discord.AppCommandType.chat_input)
         
-        def process_command(cmd_obj, group_name_override=None): # Renamed group_name to group_name_override
+        def process_command(cmd_obj, group_name_override=None):
             key = f"{group_name_override}_{cmd_obj.name}" if group_name_override else cmd_obj.name
             is_manageable = key in ALL_CONFIGURABLE_COMMANDS_FLAT 
-            
-            # Explicitly mark /arvo_config setup and /tickets setup as not manageable by users for toggling
             if group_name_override == self.arvo_config_group.name and cmd_obj.name == "setup": is_manageable = False 
             if group_name_override == self.tickets_group.name and cmd_obj.name == "setup": is_manageable = False 
 
@@ -351,11 +373,10 @@ class ArvoBot(commands.Bot):
 
         for cmd in all_tree_commands:
             if isinstance(cmd, app_commands.Group): 
-                # Check against the group instances on the bot
                 if cmd.name in [self.arvo_config_group.name, self.infract_group.name, self.staffmanage_group.name, self.staffinfract_group.name, self.tickets_group.name]:
                     for sub_cmd in cmd.commands: 
                         if isinstance(sub_cmd, app_commands.Command): process_command(sub_cmd, group_name_override=cmd.name)
-            elif isinstance(cmd, app_commands.Command): # Top-level commands
+            elif isinstance(cmd, app_commands.Command): 
                 process_command(cmd)
                 
         self.COMMAND_REGISTRY = temp_registry
@@ -369,7 +390,7 @@ intents.message_content = True
 bot = ArvoBot(command_prefix=commands.when_mentioned_or("!arvo-main-unused!"), intents=intents)
 
 # --- Custom Check Exceptions & Permission Logic ---
-# ... (Custom Exceptions and Permission Check functions remain the same) ...
+# ... (Definitions for CommandDisabledInGuild, MissingConfiguredRole, HierarchyError) ...
 class CommandDisabledInGuild(app_commands.CheckFailure):
     def __init__(self, command_name: str, *args):
         super().__init__(f"The command `/{command_name.replace('_', ' ')}` is currently disabled in this server.", *args)
@@ -415,14 +436,14 @@ def check_command_status_and_permission(permission_level: Optional[str] = "gener
                     role_name = "configured High-Rank Staff"; role_obj = interaction.guild.get_role(high_rank_role_id)
                     if role_obj: role_name = role_obj.name
                     raise MissingConfiguredRole(command_name_key, role_name)
-        elif permission_level == "admin_only": # For commands like /tickets setup
+        elif permission_level == "admin_only": 
             if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_guild: 
                 raise MissingConfiguredRole(command_name_key, "Manage Server permission")
         return True
     return app_commands.check(predicate)
 
 # --- Confirmation View, Logging, Infractions, Hierarchy ---
-# ... (These helper classes and functions remain the same as previous version) ...
+# ... (These helper classes and functions remain the same) ...
 class ConfirmationView(View):
     def __init__(self, author_id: int):
         super().__init__(timeout=60.0); self.value = None; self.author_id = author_id
@@ -463,7 +484,7 @@ def add_infraction_record(guild_id: int, user_id: int, type: str, reason: str, m
     return infraction_id
 
 def check_hierarchy(interaction: discord.Interaction, target_member: discord.Member) -> bool: 
-    # Allow running commands on oneself for testing by removing the initial self-check
+    # Allow running commands on oneself for testing
     # if interaction.user.id == target_member.id: raise HierarchyError("You cannot perform this action on yourself.")
     if not isinstance(interaction.user, discord.Member) : return False 
     if interaction.user.id == interaction.guild.owner_id and interaction.user.id != target_member.id : return True 
@@ -475,6 +496,7 @@ def check_hierarchy(interaction: discord.Interaction, target_member: discord.Mem
         if interaction.user.id != target_member.id and interaction.user.top_role <= target_member.top_role : 
             raise HierarchyError("You cannot perform this action on a member with an equal or higher role.")
     return True
+
 # --- Bot Event Listeners ---
 @bot.event
 async def on_ready():
@@ -849,93 +871,48 @@ async def viewinfractions(interaction: discord.Interaction, user: discord.User):
 
 # --- Ticket System Commands & Modals ---
 # ... (Ticket system implementation will go here) ...
-# Placeholder for Ticket Setup Modal
 class TicketPanelSetupModal(Modal, title="Create/Edit Ticket Panel"):
     panel_internal_name = TextInput(label="Panel Internal Name (for your reference)", placeholder="e.g., general-support-panel", required=True)
     panel_title = TextInput(label="Panel Title (in embed)", placeholder="General Support Ticket", required=True)
     panel_content = TextInput(label="Panel Description (in embed)", style=discord.TextStyle.paragraph, placeholder="Click the button below to open a general support ticket.", required=True)
     button_text = TextInput(label="Button Text", placeholder="Open Support Ticket", required=True)
-    # More fields will be added via Views for RoleSelect, ChannelSelect etc.
-    
     async def on_submit(self, interaction: discord.Interaction):
-        # This is a simplified on_submit. The real one will collect more data
-        # and likely be part of a multi-step View process.
         guild_id = interaction.guild_id
-        if guild_id not in ticket_panels_data:
-            ticket_panels_data[guild_id] = []
-        
+        if guild_id not in ticket_panels_data: ticket_panels_data[guild_id] = []
         panel_config = {
-            "panel_id": str(uuid.uuid4()), # Unique ID for this panel
-            "internal_name": self.panel_internal_name.value,
-            "title": self.panel_title.value,
-            "content": self.panel_content.value,
-            "button_text": self.button_text.value,
-            "button_custom_id": f"ticket_panel_btn_{str(uuid.uuid4())[:8]}", # Unique ID for the button
-            # Placeholders for other settings from your image:
-            "support_team_roles": [], # List of role IDs
-            "ticket_category_id": None, # Channel ID of category
-            "naming_scheme": "ticket-%id%",
-            "mention_on_open_roles": [],
-            "delete_mentions": False,
-            "panel_color": None, # Hex
-            "panel_channel_id": None, # Channel ID to post panel
-            "is_disabled": False,
-            "button_color": "blue", # Default
-            "button_emoji": None,
-            "large_image_url": None,
-            "small_image_url": None,
+            "panel_id": str(uuid.uuid4()), "internal_name": self.panel_internal_name.value,
+            "title": self.panel_title.value, "content": self.panel_content.value,
+            "button_text": self.button_text.value, "button_custom_id": f"ticket_panel_btn_{str(uuid.uuid4())[:8]}",
+            "support_team_roles": [], "ticket_category_id": None, "naming_scheme": "ticket-%id%",
+            "mention_on_open_roles": [], "delete_mentions": False, "panel_color": None, 
+            "panel_channel_id": None, "is_disabled": False, "button_color": "blue", 
+            "button_emoji": None, "large_image_url": None, "small_image_url": None,
             "welcome_message": "Welcome to your ticket! A staff member will be with you shortly.",
-            "access_control_roles": [], # Roles that can open this ticket type
-            "next_ticket_id": 1
+            "access_control_roles": [], "next_ticket_id": 1
         }
-        # For a real setup, you'd collect channel/role IDs via Selects in a View before showing this Modal,
-        # or use multiple Modals. This is a simplified placeholder.
-        
-        # For now, just acknowledge. Real implementation would save and post panel.
         await interaction.response.send_message(f"Placeholder: Panel '{self.panel_internal_name.value}' setup initiated. More steps needed.", ephemeral=True)
-        # ticket_panels_data[guild_id].append(panel_config)
-        # save_to_json(ticket_panels_data, TICKET_PANELS_FILE)
-        # await post_ticket_panel(interaction.guild, panel_config) # A new function to post the panel
 
 @bot.tickets_group.command(name="setup", description="Setup or manage ticket panels for this server.")
-@check_command_status_and_permission(permission_level="admin_only", force_all_on_for_testing=True) # Only server managers (manage_guild)
+@check_command_status_and_permission(permission_level="admin_only", force_all_on_for_testing=True) 
 async def tickets_setup(interaction: discord.Interaction):
-    # This will eventually present a View with options: Create, Edit, Delete, List panels.
-    # For now, it just opens a basic modal for creating a new panel.
-    # A more complex flow with Views and multiple Modals is needed for all options.
     await interaction.response.send_modal(TicketPanelSetupModal())
-    # Note: This is a very basic starting point. The full setup from your image requires a multi-step UI.
 
 @bot.tickets_group.command(name="useradd", description="Adds a user to the current ticket channel.")
-@check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True) # Or specific ticket support role
+@check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True) 
 @app_commands.describe(user="The user to add to this ticket.")
 async def tickets_useradd(interaction: discord.Interaction, user: discord.Member):
     if not interaction.guild or not isinstance(interaction.channel, TextChannel):
-        await interaction.response.send_message("This command can only be used in a ticket channel.", ephemeral=True)
-        return
-
-    # Check if current channel is an active ticket
+        await interaction.response.send_message("This command can only be used in a ticket channel.", ephemeral=True); return
     guild_tickets = active_tickets_data.get(interaction.guild_id, {})
     ticket_info = guild_tickets.get(interaction.channel.id)
-
     if not ticket_info:
-        await interaction.response.send_message("This does not appear to be an active ticket channel.", ephemeral=True)
-        return
-
-    # Permission check: Only original support team for this ticket type or admins
-    # This requires knowing which panel this ticket came from to get its support_team_roles
-    # For V1, let's simplify: if command user is general_staff, allow.
-    # A more robust check would involve looking up panel_id from ticket_info, then panel_config.
-
+        await interaction.response.send_message("This does not appear to be an active ticket channel.", ephemeral=True); return
     try:
         await interaction.channel.set_permissions(user, read_messages=True, send_messages=True)
         await interaction.response.send_message(f"{user.mention} has been added to this ticket.", ephemeral=False)
         await log_to_discord_channel(interaction.guild, "main", Embed(description=f"{interaction.user.mention} added {user.mention} to ticket {interaction.channel.mention}."))
-    except discord.Forbidden:
-        await interaction.response.send_message("I don't have permissions to modify this channel's permissions.", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message(f"An error occurred: {e}", ephemeral=True)
-
+    except discord.Forbidden: await interaction.response.send_message("I don't have permissions to modify this channel's permissions.", ephemeral=True)
+    except Exception as e: await interaction.response.send_message(f"An error occurred: {e}", ephemeral=True)
 
 # --- Toggle Command ---
 @app_commands.command(name="togglecommand", description="Enables or disables a manageable command for this server.")
