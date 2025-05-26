@@ -324,13 +324,12 @@ def start_keep_alive_server():
     server_thread.start()
 # --- End Flask App ---
 
-# --- Command Groups (Defined globally) ---
+# --- Command Groups (Defined globally, BEFORE bot instance) ---
 arvo_config_group = app_commands.Group(name="arvo_config", description="Configure Arvo bot for this server.", guild_only=True) 
 infract_group = app_commands.Group(name="infract", description="User infraction management commands.", guild_only=True) 
 staffmanage_group = app_commands.Group(name="staffmanage", description="Staff management commands.", guild_only=True) 
 staffinfract_group = app_commands.Group(name="staffinfract", description="Staff infraction commands.", guild_only=True) 
-tickets_group = app_commands.Group(name="tickets", description="Ticket system commands.", guild_only=True) # New Ticket Group
-
+tickets_group = app_commands.Group(name="tickets", description="Ticket system commands.", guild_only=True)
 
 # --- Custom Bot Class ---
 class ArvoBot(commands.Bot):
@@ -338,7 +337,7 @@ class ArvoBot(commands.Bot):
         super().__init__(*args, **kwargs)
         self.COMMAND_REGISTRY: Dict[str, Any] = {}
         self.COMMAND_REGISTRY_READY = asyncio.Event()
-        # Group attributes are not needed here if groups are defined globally and added to tree in setup_hook
+        # No need to define group attributes here if they are global
 
     async def setup_hook(self): 
         # Add globally defined groups to the tree
@@ -348,7 +347,7 @@ class ArvoBot(commands.Bot):
         self.tree.add_command(staffinfract_group)
         self.tree.add_command(tickets_group)
         
-        await asyncio.sleep(0.1) # Ensure commands are registered to groups
+        await asyncio.sleep(0.1) 
         
         temp_registry = {}
         all_tree_commands = self.tree.get_commands(type=discord.AppCommandType.chat_input)
@@ -568,7 +567,7 @@ async def arvohelp(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # --- Config Group Commands ---
-@arvo_config_group.command(name="setup", description=f"Get links to {ARVO_BOT_NAME}'s configuration dashboard.")
+@arvo_config_group.command(name="setup", description=f"Get links to {ARVO_BOT_NAME}'s configuration dashboard.") # Uses global arvo_config_group
 @app_commands.checks.has_permissions(administrator=True) 
 async def arvo_config_setup(interaction: discord.Interaction): 
     dashboard_link_base = APP_BASE_URL_CONFIG.rstrip('/') if APP_BASE_URL_CONFIG else None
@@ -580,7 +579,7 @@ async def arvo_config_setup(interaction: discord.Interaction):
     await interaction.response.send_message(msg, ephemeral=True)
 
 # --- Infraction Commands ---
-@infract_group.command(name="warn", description="Warns a user.")
+@infract_group.command(name="warn", description="Warns a user.") # Uses global infract_group
 @check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(member="The member to warn.", reason="The reason for the warning.")
 async def infract_warn(interaction: discord.Interaction, member: discord.Member, reason: str): 
@@ -604,8 +603,6 @@ async def infract_warn(interaction: discord.Interaction, member: discord.Member,
     else: await interaction.followup.send("⚠️ Warn confirmation timed out.", ephemeral=True)
 
 # ... (Rest of infract, staffmanage, staffinfract, viewinfractions commands are defined using @<global_group_name>.command and have force_all_on_for_testing=True in their decorator)
-# ... Content omitted for brevity but assume all commands are correctly decorated ...
-
 @infract_group.command(name="mute", description="Mutes a user for a specified number of hours.")
 @check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(member="The member to mute.", hours="Duration in hours (1-672).", reason="The reason for the mute.")
@@ -878,12 +875,12 @@ class TicketPanelSetupModal(Modal, title="Create/Edit Ticket Panel"):
         }
         await interaction.response.send_message(f"Placeholder: Panel '{self.panel_internal_name.value}' setup initiated. More steps needed for full config.", ephemeral=True)
 
-@bot.tickets_group.command(name="setup", description="Setup or manage ticket panels for this server.")
+@tickets_group.command(name="setup", description="Setup or manage ticket panels for this server.") # Uses global tickets_group
 @check_command_status_and_permission(permission_level="admin_only", force_all_on_for_testing=True) 
 async def tickets_setup(interaction: discord.Interaction):
     await interaction.response.send_modal(TicketPanelSetupModal())
 
-@bot.tickets_group.command(name="useradd", description="Adds a user to the current ticket channel.")
+@tickets_group.command(name="useradd", description="Adds a user to the current ticket channel.") # Uses global tickets_group
 @check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True) 
 @app_commands.describe(user="The user to add to this ticket.")
 async def tickets_useradd(interaction: discord.Interaction, user: discord.Member):
