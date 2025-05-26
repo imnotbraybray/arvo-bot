@@ -125,7 +125,7 @@ def get_guild_log_channel_id(guild_id: int, log_type: str = "main") -> Optional[
 # --- Flask App (Routes are the same, content omitted for brevity) ---
 app = Flask(__name__) 
 app.secret_key = FLASK_SECRET_KEY
-# ... (All Flask routes from previous version: /, /privacy-policy, /terms-and-conditions, /keep-alive, /login, /callback, /logout, /dashboard, /dashboard/servers, /dashboard/guild/<guild_id_str>, /dashboard/guild/<guild_id_str>/save_command_settings, etc.)
+# ... (All Flask routes from previous version)
 @app.route('/')
 def index(): return render_template('index.html', ARVO_BOT_NAME=ARVO_BOT_NAME)
 @app.route('/privacy-policy')
@@ -324,41 +324,31 @@ def start_keep_alive_server():
     server_thread.start()
 # --- End Flask App ---
 
+# --- Command Groups (Defined globally) ---
+arvo_config_group = app_commands.Group(name="arvo_config", description="Configure Arvo bot for this server.", guild_only=True) 
+infract_group = app_commands.Group(name="infract", description="User infraction management commands.", guild_only=True) 
+staffmanage_group = app_commands.Group(name="staffmanage", description="Staff management commands.", guild_only=True) 
+staffinfract_group = app_commands.Group(name="staffinfract", description="Staff infraction commands.", guild_only=True) 
+tickets_group = app_commands.Group(name="tickets", description="Ticket system commands.", guild_only=True) # New Ticket Group
+
+
 # --- Custom Bot Class ---
 class ArvoBot(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.COMMAND_REGISTRY: Dict[str, Any] = {}
         self.COMMAND_REGISTRY_READY = asyncio.Event()
-        self.arvo_config_group: Optional[app_commands.Group] = None
-        self.infract_group: Optional[app_commands.Group] = None
-        self.staffmanage_group: Optional[app_commands.Group] = None
-        self.staffinfract_group: Optional[app_commands.Group] = None
-        self.tickets_group: Optional[app_commands.Group] = None
+        # Group attributes are not needed here if groups are defined globally and added to tree in setup_hook
 
     async def setup_hook(self): 
-        self.arvo_config_group = app_commands.Group(name="arvo_config", description="Configure Arvo bot for this server.", guild_only=True)
-        self.infract_group = app_commands.Group(name="infract", description="User infraction management commands.", guild_only=True)
-        self.staffmanage_group = app_commands.Group(name="staffmanage", description="Staff management commands.", guild_only=True)
-        self.staffinfract_group = app_commands.Group(name="staffinfract", description="Staff infraction commands.", guild_only=True)
-        self.tickets_group = app_commands.Group(name="tickets", description="Ticket system commands.", guild_only=True)
-
-        self.tree.add_command(self.arvo_config_group)
-        self.tree.add_command(self.infract_group)
-        self.tree.add_command(self.staffmanage_group)
-        self.tree.add_command(self.staffinfract_group)
-        self.tree.add_command(self.tickets_group)
+        # Add globally defined groups to the tree
+        self.tree.add_command(arvo_config_group)
+        self.tree.add_command(infract_group)
+        self.tree.add_command(staffmanage_group)
+        self.tree.add_command(staffinfract_group)
+        self.tree.add_command(tickets_group)
         
-        # Commands will be added to these groups using decorators like @bot.infract_group.command()
-        # After all commands are defined and decorated, this setup_hook will populate the COMMAND_REGISTRY
-        # by inspecting self.tree.
-        
-        # It's important that command definitions (decorators) run before this setup_hook completes
-        # if we are to build the registry from the tree.
-        # For a single file, this order is usually fine.
-        
-        # Delay COMMAND_REGISTRY population slightly to ensure all decorators have run
-        await asyncio.sleep(0.1) # Small delay, might not be strictly necessary but can help
+        await asyncio.sleep(0.1) # Ensure commands are registered to groups
         
         temp_registry = {}
         all_tree_commands = self.tree.get_commands(type=discord.AppCommandType.chat_input)
@@ -366,14 +356,14 @@ class ArvoBot(commands.Bot):
         def process_command(cmd_obj, group_name_override=None):
             key = f"{group_name_override}_{cmd_obj.name}" if group_name_override else cmd_obj.name
             is_manageable = key in ALL_CONFIGURABLE_COMMANDS_FLAT 
-            if group_name_override == self.arvo_config_group.name and cmd_obj.name == "setup": is_manageable = False 
-            if group_name_override == self.tickets_group.name and cmd_obj.name == "setup": is_manageable = False 
+            if group_name_override == arvo_config_group.name and cmd_obj.name == "setup": is_manageable = False 
+            if group_name_override == tickets_group.name and cmd_obj.name == "setup": is_manageable = False 
 
             temp_registry[key] = {"app_command_obj": cmd_obj, "manageable": is_manageable, "group_name": group_name_override, "base_name": cmd_obj.name}
 
         for cmd in all_tree_commands:
             if isinstance(cmd, app_commands.Group): 
-                if cmd.name in [self.arvo_config_group.name, self.infract_group.name, self.staffmanage_group.name, self.staffinfract_group.name, self.tickets_group.name]:
+                if cmd.name in [arvo_config_group.name, infract_group.name, staffmanage_group.name, staffinfract_group.name, tickets_group.name]:
                     for sub_cmd in cmd.commands: 
                         if isinstance(sub_cmd, app_commands.Command): process_command(sub_cmd, group_name_override=cmd.name)
             elif isinstance(cmd, app_commands.Command): 
@@ -484,8 +474,6 @@ def add_infraction_record(guild_id: int, user_id: int, type: str, reason: str, m
     return infraction_id
 
 def check_hierarchy(interaction: discord.Interaction, target_member: discord.Member) -> bool: 
-    # Allow running commands on oneself for testing
-    # if interaction.user.id == target_member.id: raise HierarchyError("You cannot perform this action on yourself.")
     if not isinstance(interaction.user, discord.Member) : return False 
     if interaction.user.id == interaction.guild.owner_id and interaction.user.id != target_member.id : return True 
     if target_member.id == interaction.guild.owner_id and interaction.user.id != target_member.id: 
@@ -521,16 +509,15 @@ async def sync_guild_commands(guild: discord.Guild, force_all_on: bool = False):
     try:
         bot.tree.clear_commands(guild=guild)
         
-        # Always add core non-manageable commands/groups
-        bot.tree.add_command(bot.arvo_config_group, guild=guild) 
-        bot.tree.add_command(togglecommand_cmd, guild=guild) # togglecommand_cmd is defined globally
-        bot.tree.add_command(bot.tickets_group, guild=guild) 
+        bot.tree.add_command(arvo_config_group, guild=guild) 
+        bot.tree.add_command(togglecommand_cmd, guild=guild) 
+        bot.tree.add_command(tickets_group, guild=guild) 
         
         if force_all_on:
             print(f"DEBUG: Forcing all manageable commands ON for guild {guild.name}")
-            if bot.infract_group: bot.tree.add_command(bot.infract_group, guild=guild)
-            if bot.staffmanage_group: bot.tree.add_command(bot.staffmanage_group, guild=guild)
-            if bot.staffinfract_group: bot.tree.add_command(bot.staffinfract_group, guild=guild)
+            bot.tree.add_command(infract_group, guild=guild)
+            bot.tree.add_command(staffmanage_group, guild=guild)
+            bot.tree.add_command(staffinfract_group, guild=guild)
             
             for cmd_key, cmd_data in bot.COMMAND_REGISTRY.items():
                 if cmd_data.get("manageable") and not cmd_data.get("group_name") and cmd_data.get("app_command_obj"):
@@ -549,9 +536,9 @@ async def sync_guild_commands(guild: discord.Guild, force_all_on: bool = False):
                     if parent_group_name:
                         if parent_group_name not in added_groups_this_sync:
                             group_to_add = None
-                            if parent_group_name == bot.infract_group.name: group_to_add = bot.infract_group
-                            elif parent_group_name == bot.staffmanage_group.name: group_to_add = bot.staffmanage_group
-                            elif parent_group_name == bot.staffinfract_group.name: group_to_add = bot.staffinfract_group
+                            if parent_group_name == infract_group.name: group_to_add = infract_group
+                            elif parent_group_name == staffmanage_group.name: group_to_add = staffmanage_group
+                            elif parent_group_name == staffinfract_group.name: group_to_add = staffinfract_group
                             if group_to_add:
                                 try: bot.tree.add_command(group_to_add, guild=guild); added_groups_this_sync.add(parent_group_name)
                                 except discord.app_commands.CommandAlreadyRegistered: pass
@@ -581,7 +568,7 @@ async def arvohelp(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # --- Config Group Commands ---
-@bot.arvo_config_group.command(name="setup", description=f"Get links to {ARVO_BOT_NAME}'s configuration dashboard.")
+@arvo_config_group.command(name="setup", description=f"Get links to {ARVO_BOT_NAME}'s configuration dashboard.")
 @app_commands.checks.has_permissions(administrator=True) 
 async def arvo_config_setup(interaction: discord.Interaction): 
     dashboard_link_base = APP_BASE_URL_CONFIG.rstrip('/') if APP_BASE_URL_CONFIG else None
@@ -593,7 +580,7 @@ async def arvo_config_setup(interaction: discord.Interaction):
     await interaction.response.send_message(msg, ephemeral=True)
 
 # --- Infraction Commands ---
-@bot.infract_group.command(name="warn", description="Warns a user.")
+@infract_group.command(name="warn", description="Warns a user.")
 @check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(member="The member to warn.", reason="The reason for the warning.")
 async def infract_warn(interaction: discord.Interaction, member: discord.Member, reason: str): 
@@ -616,10 +603,10 @@ async def infract_warn(interaction: discord.Interaction, member: discord.Member,
     elif view.value is False: await interaction.followup.send("⚠️ Warn cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Warn confirmation timed out.", ephemeral=True)
 
-# ... (Rest of infract, staffmanage, staffinfract, viewinfractions commands are defined using @bot.<group_name>.command and have force_all_on_for_testing=True in their decorator)
+# ... (Rest of infract, staffmanage, staffinfract, viewinfractions commands are defined using @<global_group_name>.command and have force_all_on_for_testing=True in their decorator)
 # ... Content omitted for brevity but assume all commands are correctly decorated ...
 
-@bot.infract_group.command(name="mute", description="Mutes a user for a specified number of hours.")
+@infract_group.command(name="mute", description="Mutes a user for a specified number of hours.")
 @check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(member="The member to mute.", hours="Duration in hours (1-672).", reason="The reason for the mute.")
 async def infract_mute(interaction: discord.Interaction, member: discord.Member, hours: app_commands.Range[int, 1, 672], reason: str): 
@@ -647,7 +634,7 @@ async def infract_mute(interaction: discord.Interaction, member: discord.Member,
     elif view.value is False: await interaction.followup.send("⚠️ Mute cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Mute confirmation timed out.", ephemeral=True)
 
-@bot.infract_group.command(name="kick", description="Kicks a user from the server.")
+@infract_group.command(name="kick", description="Kicks a user from the server.")
 @check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(member="The member to kick.", reason="The reason for the kick.")
 async def infract_kick(interaction: discord.Interaction, member: discord.Member, reason: str): 
@@ -675,7 +662,7 @@ async def infract_kick(interaction: discord.Interaction, member: discord.Member,
     elif view.value is False: await interaction.followup.send("⚠️ Kick cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Kick confirmation timed out.", ephemeral=True)
 
-@bot.infract_group.command(name="ban", description="Bans a user from the server.")
+@infract_group.command(name="ban", description="Bans a user from the server.")
 @check_command_status_and_permission(permission_level="general_staff", force_all_on_for_testing=True)
 @app_commands.describe(user="User to ban (ID if not in server).", reason="Reason for ban.", delete_message_days="Days of messages to delete (0-7).")
 async def infract_ban(interaction: discord.Interaction, user: discord.User, reason: str, delete_message_days: app_commands.Range[int, 0, 7] = 0): 
@@ -705,7 +692,7 @@ async def infract_ban(interaction: discord.Interaction, user: discord.User, reas
     elif view.value is False: await interaction.followup.send("⚠️ Ban cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Ban confirmation timed out.", ephemeral=True)
 
-@bot.staffmanage_group.command(name="promote", description="Promotes a staff member and assigns a new role.")
+@staffmanage_group.command(name="promote", description="Promotes a staff member and assigns a new role.")
 @check_command_status_and_permission(permission_level="high_rank_staff", force_all_on_for_testing=True)
 @app_commands.describe(staff_member="Staff member to promote.", new_role="New role to assign.", reason="Reason for promotion.")
 async def staffmanage_promote(interaction: discord.Interaction, staff_member: discord.Member, new_role: discord.Role, reason: str): 
@@ -735,7 +722,7 @@ async def staffmanage_promote(interaction: discord.Interaction, staff_member: di
     elif view.value is False: await interaction.followup.send("⚠️ Promotion cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Promotion confirmation timed out.", ephemeral=True)
 
-@bot.staffmanage_group.command(name="demote", description="Demotes a staff member and removes a role.")
+@staffmanage_group.command(name="demote", description="Demotes a staff member and removes a role.")
 @check_command_status_and_permission(permission_level="high_rank_staff", force_all_on_for_testing=True)
 @app_commands.describe(staff_member="Staff member to demote.", role_to_remove="Role to remove.", reason="Reason for demotion.")
 async def staffmanage_demote(interaction: discord.Interaction, staff_member: discord.Member, role_to_remove: discord.Role, reason: str): 
@@ -762,7 +749,7 @@ async def staffmanage_demote(interaction: discord.Interaction, staff_member: dis
     elif view.value is False: await interaction.followup.send("⚠️ Demotion cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Demotion confirmation timed out.", ephemeral=True)
 
-@bot.staffmanage_group.command(name="terminate", description="Logs staff termination. Manual role removal required.")
+@staffmanage_group.command(name="terminate", description="Logs staff termination. Manual role removal required.")
 @check_command_status_and_permission(permission_level="high_rank_staff", force_all_on_for_testing=True)
 @app_commands.describe(staff_member="Staff member being terminated.", reason="Reason for termination.")
 async def staffmanage_terminate(interaction: discord.Interaction, staff_member: discord.Member, reason: str): 
@@ -788,7 +775,7 @@ async def staffmanage_terminate(interaction: discord.Interaction, staff_member: 
     elif view.value is False: await interaction.followup.send("⚠️ Termination logging cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Termination confirmation timed out.", ephemeral=True)
 
-@bot.staffinfract_group.command(name="warning", description="Issues an official warning to a staff member.")
+@staffinfract_group.command(name="warning", description="Issues an official warning to a staff member.")
 @check_command_status_and_permission(permission_level="high_rank_staff", force_all_on_for_testing=True)
 @app_commands.describe(staff_member="Staff member to warn.", reason="Reason for staff warning.")
 async def staffinfract_warning(interaction: discord.Interaction, staff_member: discord.Member, reason: str): 
@@ -814,7 +801,7 @@ async def staffinfract_warning(interaction: discord.Interaction, staff_member: d
     elif view.value is False: await interaction.followup.send("⚠️ Staff warning cancelled.", ephemeral=True)
     else: await interaction.followup.send("⚠️ Staff warning confirmation timed out.", ephemeral=True)
 
-@bot.staffinfract_group.command(name="strike", description="Issues a strike to a staff member.")
+@staffinfract_group.command(name="strike", description="Issues a strike to a staff member.")
 @check_command_status_and_permission(permission_level="high_rank_staff", force_all_on_for_testing=True)
 @app_commands.describe(staff_member="Staff member to issue a strike to.", reason="Reason for staff strike.")
 async def staffinfract_strike(interaction: discord.Interaction, staff_member: discord.Member, reason: str): 
@@ -870,7 +857,6 @@ async def viewinfractions(interaction: discord.Interaction, user: discord.User):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # --- Ticket System Commands & Modals ---
-# ... (Ticket system implementation will go here) ...
 class TicketPanelSetupModal(Modal, title="Create/Edit Ticket Panel"):
     panel_internal_name = TextInput(label="Panel Internal Name (for your reference)", placeholder="e.g., general-support-panel", required=True)
     panel_title = TextInput(label="Panel Title (in embed)", placeholder="General Support Ticket", required=True)
@@ -890,7 +876,7 @@ class TicketPanelSetupModal(Modal, title="Create/Edit Ticket Panel"):
             "welcome_message": "Welcome to your ticket! A staff member will be with you shortly.",
             "access_control_roles": [], "next_ticket_id": 1
         }
-        await interaction.response.send_message(f"Placeholder: Panel '{self.panel_internal_name.value}' setup initiated. More steps needed.", ephemeral=True)
+        await interaction.response.send_message(f"Placeholder: Panel '{self.panel_internal_name.value}' setup initiated. More steps needed for full config.", ephemeral=True)
 
 @bot.tickets_group.command(name="setup", description="Setup or manage ticket panels for this server.")
 @check_command_status_and_permission(permission_level="admin_only", force_all_on_for_testing=True) 
