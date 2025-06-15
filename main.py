@@ -42,6 +42,7 @@ if FLASK_SECRET_KEY is None: print(f"CRITICAL WARNING ({ARVO_BOT_NAME}): FLASK_S
 # --- Data Storage Files ---
 CONFIG_FILE = "arvo_guild_configs.json"
 ERLC_ACTIVE_SESSIONS_FILE = "erlc_active_sessions.json" 
+ROBLOX_USERS_FILE = "roblox_users.json" # NEW: For account linking
 
 # --- Default Guild Configuration Structure ---
 DEFAULT_GUILD_CONFIG = {
@@ -58,6 +59,7 @@ DEFAULT_GUILD_CONFIG = {
 # --- Data Storage ---
 guild_configurations: Dict[int, Dict[str, Any]] = {} 
 active_sessions_data: Dict[int, Dict[str, Any]] = {} 
+roblox_users_data: Dict[str, Dict[str, Any]] = {} # NEW: discord_id -> {roblox_id, roblox_username}
 
 def get_guild_config(guild_id: int) -> Dict[str, Any]:
     """Gets the config for a guild, creating a default if one doesn't exist."""
@@ -65,7 +67,6 @@ def get_guild_config(guild_id: int) -> Dict[str, Any]:
         print(f"INFO: No config found for guild {guild_id}. Creating default.")
         guild_configurations[guild_id] = json.loads(json.dumps(DEFAULT_GUILD_CONFIG)) # Deep copy
         save_to_json(guild_configurations, CONFIG_FILE)
-    # Ensure nested erlc_config exists for older configs
     if "erlc_config" not in guild_configurations[guild_id]:
          guild_configurations[guild_id]["erlc_config"] = json.loads(json.dumps(DEFAULT_GUILD_CONFIG["erlc_config"]))
     return guild_configurations[guild_id]
@@ -84,7 +85,6 @@ def load_from_json(filename: str, default_data: Any = None) -> Any:
 
 def save_to_json(data: Any, filename: str):
     try:
-        # Convert all keys to strings before saving
         data_to_save = {str(k): v for k, v in data.items()}
         with open(filename, 'w') as f:
             json.dump(data_to_save, f, indent=4)
@@ -92,25 +92,25 @@ def save_to_json(data: Any, filename: str):
 
 
 def load_all_data():
-    global guild_configurations, active_sessions_data
+    global guild_configurations, active_sessions_data, roblox_users_data
     raw_guild_configs = load_from_json(CONFIG_FILE, {})
     guild_configurations = {int(k): v for k, v in raw_guild_configs.items()} 
     
     raw_active_sessions = load_from_json(ERLC_ACTIVE_SESSIONS_FILE, {})
     active_sessions_data = {int(k): v for k, v in raw_active_sessions.items()}
+    
+    roblox_users_data = load_from_json(ROBLOX_USERS_FILE, {}) # NEW
     print(f"INFO ({ARVO_BOT_NAME}): All data loaded from JSON files.")
 
-# --- Flask App (This is being kept for the dashboard, but we'll focus on bot commands first) ---
+# --- Flask App ---
 app = Flask(__name__) 
 app.secret_key = FLASK_SECRET_KEY
 
 @app.route('/')
 def index(): 
-    # This basic route ensures the web service has something to respond with.
     return f"{ARVO_BOT_NAME} is running!"
 
 def run_flask():
-  # Render dynamically assigns a port, so we use the PORT environment variable.
   port = int(os.environ.get('PORT', 8080)) 
   app.run(host='0.0.0.0', port=port) 
 
@@ -122,6 +122,7 @@ def start_keep_alive_server():
 # --- ERLC Command Groups ---
 erlc_config_group = app_commands.Group(name="erlc-config", description="Configure Arvo ERLC bot for this server.", guild_only=True)
 session_group = app_commands.Group(name="session", description="ERLC session management commands.", guild_only=True)
+account_group = app_commands.Group(name="account", description="Link your Discord to your Roblox account.", guild_only=True) # NEW
 
 # --- Custom Bot Class ---
 class ArvoBot(commands.Bot):
@@ -129,9 +130,9 @@ class ArvoBot(commands.Bot):
         super().__init__(*args, **kwargs)
 
     async def setup_hook(self): 
-        # Add the new ERLC command groups to the bot's central command tree
         self.tree.add_command(erlc_config_group)
         self.tree.add_command(session_group)
+        self.tree.add_command(account_group) # NEW
         
 # --- Discord Bot Instance ---
 intents = discord.Intents.default()
@@ -145,34 +146,12 @@ async def on_ready():
     print(f'{ARVO_BOT_NAME} has logged in as {bot.user.name} (ID: {bot.user.id})')
     print(f'Discord.py Version: {discord.__version__}')
     
-    # --- AGGRESSIVE COMMAND SYNC ---
-    # This is a more forceful way to clear caches and ensure commands update.
     try:
-        print("Attempting to aggressively sync commands...")
-        # Clear commands for all guilds first
-        for guild in bot.guilds:
-            try:
-                print(f"Clearing commands for guild: {guild.name} ({guild.id})...")
-                bot.tree.clear_commands(guild=guild)
-                await bot.tree.sync(guild=guild)
-                print(f"Commands cleared for {guild.name}.")
-            except discord.errors.Forbidden:
-                print(f"Failed to clear commands for {guild.name} - Missing Permissions.")
-        
-        # Now, sync the new commands to all guilds.
-        print("Re-syncing all new commands...")
-        for guild in bot.guilds:
-            try:
-                await bot.tree.sync(guild=guild)
-                print(f"Commands synced for guild: {guild.name} ({guild.id})")
-            except discord.errors.Forbidden as e:
-                print(f"ERROR: Lacking 'applications.commands' scope for guild: {guild.name} ({guild.id}). {e}")
-            except Exception as e:
-                print(f"ERROR: Failed to sync commands for guild {guild.name} ({guild.id}): {e}")
-
-        print("Command sync process complete.")
+        print("Attempting to sync commands globally...")
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} commands globally.")
     except Exception as e:
-        print(f"An error occurred during the aggressive sync process: {e}")
+        print(f"An error occurred during global command sync: {e}")
 
     print(f'{ARVO_BOT_NAME} is ready and online!')
     await bot.change_presence(activity=discord.Game(name=f"Managing ERLC Servers"))
@@ -180,24 +159,17 @@ async def on_ready():
 @bot.event
 async def on_guild_join(guild: discord.Guild):
     print(f"INFO: Joined new guild: {guild.name} (ID: {guild.id})")
-    get_guild_config(guild.id) # Ensure a config file is created on join
+    get_guild_config(guild.id)
     try:
         print(f"Syncing commands for new guild: {guild.name} ({guild.id})")
-        await bot.tree.sync(guild=guild) # Sync commands for the new guild
+        await bot.tree.sync(guild=guild)
         print(f"Commands synced successfully for new guild.")
     except Exception as e:
         print(f"ERROR: Failed to sync commands for new guild {guild.name} ({guild.id}): {e}")
 
-    
 # --- Modals for Configuration ---
 class ApiKeyModal(Modal, title="Set Guild API Key"):
-    api_key_input = TextInput(
-        label="API Key",
-        placeholder="Paste your secret API key here.",
-        style=discord.TextStyle.short,
-        required=True
-    )
-
+    api_key_input = TextInput(label="API Key", placeholder="Paste your secret API key here.", style=discord.TextStyle.short, required=True)
     async def on_submit(self, interaction: discord.Interaction):
         if not interaction.guild_id: return
         api_key = self.api_key_input.value
@@ -208,41 +180,22 @@ class ApiKeyModal(Modal, title="Set Guild API Key"):
 
 # --- Permission Checks ---
 def is_session_host():
-    """Custom check to see if the user has the configured session host role or is an admin."""
     async def predicate(interaction: Interaction) -> bool:
-        if not interaction.guild or not isinstance(interaction.user, Member):
-            # This check is only for guilds
-            return False
-        
-        # Admins can always host
-        if interaction.user.guild_permissions.administrator:
-            return True
-            
+        if not interaction.guild or not isinstance(interaction.user, Member): return False
+        if interaction.user.guild_permissions.administrator: return True
         guild_config = get_guild_config(interaction.guild_id).get("erlc_config", {})
         host_role_id = guild_config.get("session_host_role_id")
-        
-        if not host_role_id:
-            raise app_commands.CheckFailure("The Session Host role has not been configured for this server. An administrator must set it using `/erlc-config set roles`.")
-            
-        if any(role.id == host_role_id for role in interaction.user.roles):
-            return True
-        
+        if not host_role_id: raise app_commands.CheckFailure("The Session Host role has not been configured.")
+        if any(role.id == host_role_id for role in interaction.user.roles): return True
         host_role = interaction.guild.get_role(host_role_id)
         raise app_commands.CheckFailure(f"You need the `{host_role.name if host_role else 'Session Host'}` role to use this command.")
-
     return app_commands.check(predicate)
 
 # --- ERLC Config Group Commands ---
+config_set_group = app_commands.Group(name="set", description="Set a configuration value.", parent=erlc_config_group)
 
-# Define a subcommand group 'set' under the parent 'erlc_config_group'
-config_set_group = app_commands.Group(name="set", description="Set a configuration value for the ERLC bot.", parent=erlc_config_group)
-
-@config_set_group.command(name="channels", description="Set the channels for ERLC announcements and logs.")
+@config_set_group.command(name="channels", description="Set the channels for announcements and logs.")
 @app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(
-    announcements_channel="Channel for session start/end announcements.",
-    logs_channel="Channel for detailed session logs (e.g., who attended)."
-)
 async def set_channels(interaction: discord.Interaction, announcements_channel: discord.TextChannel, logs_channel: discord.TextChannel):
     if not interaction.guild_id: return
     guild_config = get_guild_config(interaction.guild_id)
@@ -254,9 +207,8 @@ async def set_channels(interaction: discord.Interaction, announcements_channel: 
     embed.add_field(name="Logs Channel", value=logs_channel.mention, inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@config_set_group.command(name="roles", description="Set the roles for ERLC permissions.")
+@config_set_group.command(name="roles", description="Set the roles for permissions.")
 @app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(session_host_role="Role required to start/end ERLC sessions.")
 async def set_roles(interaction: discord.Interaction, session_host_role: discord.Role):
     if not interaction.guild_id: return
     guild_config = get_guild_config(interaction.guild_id)
@@ -271,200 +223,203 @@ async def set_roles(interaction: discord.Interaction, session_host_role: discord
 async def set_api_key(interaction: discord.Interaction):
     await interaction.response.send_modal(ApiKeyModal())
 
-
-@erlc_config_group.command(name="view", description="View the current ERLC configuration for this server.")
+@erlc_config_group.command(name="view", description="View the current ERLC configuration.")
 @app_commands.checks.has_permissions(administrator=True)
 async def view_config(interaction: discord.Interaction):
     if not interaction.guild or not interaction.guild_id: return
     guild_config = get_guild_config(interaction.guild_id).get("erlc_config", {})
-    ann_ch_id = guild_config.get("session_announcements_channel_id")
-    log_ch_id = guild_config.get("session_logs_channel_id")
-    host_role_id = guild_config.get("session_host_role_id")
+    ann_ch = interaction.guild.get_channel(guild_config.get("session_announcements_channel_id"))
+    log_ch = interaction.guild.get_channel(guild_config.get("session_logs_channel_id"))
+    host_role = interaction.guild.get_role(guild_config.get("session_host_role_id"))
     api_key_status = "Set" if guild_config.get("api_key") else "Not Set"
-    ann_ch = interaction.guild.get_channel(ann_ch_id) if ann_ch_id else "Not Set"
-    log_ch = interaction.guild.get_channel(log_ch_id) if log_ch_id else "Not Set"
-    host_role = interaction.guild.get_role(host_role_id) if host_role_id else "Not Set"
     embed = Embed(title=f"ERLC Configuration for {interaction.guild.name}", color=Color.blue())
-    embed.add_field(name="📢 Announcements Channel", value=getattr(ann_ch, 'mention', ann_ch), inline=False)
-    embed.add_field(name="📋 Logs Channel", value=getattr(log_ch, 'mention', log_ch), inline=False)
-    embed.add_field(name="👑 Session Host Role", value=getattr(host_role, 'mention', host_role), inline=False)
-    embed.add_field(name="🔑 API Key Status", value=f"`{api_key_status}` (For security, the key is never shown)", inline=False)
+    embed.add_field(name="📢 Announcements Channel", value=getattr(ann_ch, 'mention', "Not Set"), inline=False)
+    embed.add_field(name="📋 Logs Channel", value=getattr(log_ch, 'mention', "Not Set"), inline=False)
+    embed.add_field(name="👑 Session Host Role", value=getattr(host_role, 'mention', "Not Set"), inline=False)
+    embed.add_field(name="🔑 API Key Status", value=f"`{api_key_status}`", inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# --- Session Management Commands ---
+# --- Account Linking Commands ---
+async def get_roblox_user_info(roblox_username: str) -> Optional[Dict[str, Any]]:
+    """Fetches user ID and validated username from Roblox API."""
+    try:
+        response = requests.post("https://users.roblox.com/v1/usernames/users", json={"usernames": [roblox_username]})
+        response.raise_for_status()
+        data = response.json().get('data')
+        if data and len(data) > 0:
+            return {"id": data[0]['id'], "name": data[0]['name']}
+    except requests.RequestException as e:
+        print(f"Roblox API error: {e}")
+    return None
 
+@account_group.command(name="link", description="Link your Discord account to a Roblox account.")
+@app_commands.describe(roblox_username="Your exact Roblox username.")
+async def link_account(interaction: Interaction, roblox_username: str):
+    await interaction.response.defer(ephemeral=True)
+    discord_id = str(interaction.user.id)
+
+    if discord_id in roblox_users_data:
+        await interaction.followup.send("❌ Your Discord account is already linked to a Roblox account. Use `/account unlink` first.", ephemeral=True)
+        return
+        
+    roblox_info = await get_roblox_user_info(roblox_username)
+    
+    if not roblox_info:
+        await interaction.followup.send(f"❌ Could not find a Roblox user named `{roblox_username}`. Please check the spelling.", ephemeral=True)
+        return
+
+    roblox_id = roblox_info['id']
+    validated_username = roblox_info['name']
+
+    # Check if this Roblox account is already linked by someone else
+    for D_id, R_data in roblox_users_data.items():
+        if R_data.get('roblox_id') == roblox_id:
+            other_user = bot.get_user(int(D_id))
+            await interaction.followup.send(f"❌ That Roblox account is already linked by {other_user.mention if other_user else 'another user'}.", ephemeral=True)
+            return
+
+    roblox_users_data[discord_id] = {"roblox_id": roblox_id, "roblox_username": validated_username}
+    save_to_json(roblox_users_data, ROBLOX_USERS_FILE)
+    
+    await interaction.followup.send(f"✅ Your Discord account has been successfully linked to the Roblox account: **{validated_username}**.", ephemeral=True)
+
+@account_group.command(name="unlink", description="Unlink your Roblox account from your Discord account.")
+async def unlink_account(interaction: Interaction):
+    discord_id = str(interaction.user.id)
+    if discord_id in roblox_users_data:
+        del roblox_users_data[discord_id]
+        save_to_json(roblox_users_data, ROBLOX_USERS_FILE)
+        await interaction.response.send_message("✅ Your Roblox account has been unlinked.", ephemeral=True)
+    else:
+        await interaction.response.send_message("❌ You do not have a Roblox account linked.", ephemeral=True)
+
+@account_group.command(name="profile", description="View the linked Roblox profile for a Discord user.")
+@app_commands.describe(user="The Discord user to view the profile of (optional, defaults to you).")
+async def view_profile(interaction: Interaction, user: Optional[Member] = None):
+    target_user = user or interaction.user
+    discord_id = str(target_user.id)
+
+    if discord_id not in roblox_users_data:
+        if target_user.id == interaction.user.id:
+             await interaction.response.send_message("❌ You do not have a Roblox account linked. Use `/account link`.", ephemeral=True)
+        else:
+             await interaction.response.send_message(f"❌ {target_user.mention} does not have a Roblox account linked.", ephemeral=True)
+        return
+
+    user_data = roblox_users_data[discord_id]
+    roblox_id = user_data["roblox_id"]
+    roblox_username = user_data["roblox_username"]
+    
+    embed = Embed(title=f"Linked Profile for {target_user.display_name}", color=target_user.color)
+    embed.set_thumbnail(url=target_user.display_avatar.url)
+    embed.add_field(name="Discord Account", value=target_user.mention, inline=False)
+    embed.add_field(name="Roblox Account", value=f"[{roblox_username}](https://www.roblox.com/users/{roblox_id}/profile)", inline=False)
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# --- Session Management Commands ---
 @session_group.command(name="start", description="Starts a new ERLC session.")
-@app_commands.describe(
-    session_type="The type of session (e.g., Training, Patrol, Event).",
-    description="A brief description of the session."
-)
+@app_commands.describe(session_type="The type of session.", description="A brief description of the session.")
 @is_session_host()
 async def session_start(interaction: Interaction, session_type: str, description: Optional[str] = None):
     if not interaction.guild or not interaction.guild_id or not isinstance(interaction.user, Member): return
-
-    # 1. Check for existing session
     if interaction.guild_id in active_sessions_data:
-        await interaction.response.send_message("❌ A session is already active in this server. Please end it before starting a new one.", ephemeral=True)
-        return
-
-    # 2. Check for configured announcement channel
+        await interaction.response.send_message("❌ A session is already active.", ephemeral=True); return
     guild_config = get_guild_config(interaction.guild_id).get("erlc_config", {})
     announcement_channel_id = guild_config.get("session_announcements_channel_id")
     if not announcement_channel_id:
-        await interaction.response.send_message("❌ The session announcements channel has not been configured. An admin must set it via `/erlc-config set channels`.", ephemeral=True)
-        return
-        
+        await interaction.response.send_message("❌ Announcements channel not configured.", ephemeral=True); return
     announcement_channel = interaction.guild.get_channel(announcement_channel_id)
     if not isinstance(announcement_channel, TextChannel):
-        await interaction.response.send_message("❌ The configured announcements channel is invalid or I can't access it.", ephemeral=True)
-        return
-
-    # 3. Create and save session data
+        await interaction.response.send_message("❌ Announcements channel is invalid.", ephemeral=True); return
     start_time = int(time.time())
-    session_data = {
-        "host_id": interaction.user.id,
-        "start_time": start_time,
-        "session_type": session_type,
-        "description": description,
-        "attendees": [interaction.user.id] # Host is the first attendee
-    }
+    session_data = { "host_id": interaction.user.id, "start_time": start_time, "session_type": session_type, "description": description, "attendees": [interaction.user.id] }
     active_sessions_data[interaction.guild_id] = session_data
     save_to_json(active_sessions_data, ERLC_ACTIVE_SESSIONS_FILE)
-
-    # 4. Send announcement embed
     embed = Embed(title="ERLC Session Started", color=Color.green())
     embed.set_author(name=f"Host: {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
     embed.add_field(name="Session Type", value=session_type, inline=True)
     embed.add_field(name="Starts", value=f"<t:{start_time}:R>", inline=True)
-    if description:
-        embed.add_field(name="Description", value=description, inline=False)
+    if description: embed.add_field(name="Description", value=description, inline=False)
     embed.set_footer(text=f"Server: {interaction.guild.name}")
-    
     try:
         await announcement_channel.send(embed=embed)
-        await interaction.response.send_message(f"✅ Session started successfully and announced in {announcement_channel.mention}.", ephemeral=True)
+        await interaction.response.send_message(f"✅ Session started in {announcement_channel.mention}.", ephemeral=True)
     except discord.Forbidden:
-        await interaction.response.send_message(f"❌ Session started, but I could not send the announcement to {announcement_channel.mention}. Check my permissions.", ephemeral=True)
-
+        await interaction.response.send_message(f"❌ Could not send announcement to {announcement_channel.mention}.", ephemeral=True)
 
 @session_group.command(name="end", description="Ends the currently active ERLC session.")
 @is_session_host()
 async def session_end(interaction: Interaction):
     if not interaction.guild or not interaction.guild_id or not isinstance(interaction.user, Member): return
-
-    # 1. Check if a session is active
     if interaction.guild_id not in active_sessions_data:
-        await interaction.response.send_message("❌ There is no active session to end.", ephemeral=True)
-        return
-
+        await interaction.response.send_message("❌ No active session to end.", ephemeral=True); return
     session_data = active_sessions_data[interaction.guild_id]
-    
-    # Optional: Check if the person ending is the host or an admin
     if session_data.get("host_id") != interaction.user.id and not interaction.user.guild_permissions.administrator:
         original_host = interaction.guild.get_member(session_data.get("host_id"))
-        await interaction.response.send_message(f"❌ Only the session host ({original_host.mention if original_host else 'Unknown'}) or an Administrator can end the session.", ephemeral=True)
-        return
-
-    # 2. Calculate duration and prepare log
+        await interaction.response.send_message(f"❌ Only the host ({original_host.mention if original_host else 'Unknown'}) or an Admin can end this.", ephemeral=True); return
     start_time = session_data.get("start_time", int(time.time()))
     end_time = int(time.time())
     duration_seconds = end_time - start_time
     duration_str = str(datetime.timedelta(seconds=duration_seconds))
-    
-    # 3. Get channel configurations
     guild_config = get_guild_config(interaction.guild_id).get("erlc_config", {})
     announcement_channel_id = guild_config.get("session_announcements_channel_id")
     logs_channel_id = guild_config.get("session_logs_channel_id")
-
-    # 4. Send final announcements and logs
     host = interaction.guild.get_member(session_data.get("host_id")) or "Unknown Host"
-    
-    # Announcement
     if announcement_channel_id and (ann_ch := interaction.guild.get_channel(announcement_channel_id)):
         try:
             ann_embed = Embed(title="ERLC Session Ended", color=Color.red())
-            ann_embed.add_field(name="Session Type", value=session_data.get("session_type", "N/A"), inline=True)
-            ann_embed.add_field(name="Duration", value=duration_str, inline=True)
+            ann_embed.add_field(name="Session Type", value=session_data.get("session_type", "N/A"), inline=True).add_field(name="Duration", value=duration_str, inline=True)
             ann_embed.set_author(name=f"Host: {getattr(host, 'display_name', 'Unknown')}", icon_url=getattr(host, 'display_avatar', None))
             await ann_ch.send(embed=ann_embed)
-        except discord.Forbidden:
-            await interaction.followup.send("⚠️ Could not send session end announcement. Check permissions.", ephemeral=True)
-    
-    # Log
+        except discord.Forbidden: await interaction.followup.send("⚠️ Could not send end announcement.", ephemeral=True)
     if logs_channel_id and (log_ch := interaction.guild.get_channel(logs_channel_id)):
         try:
             log_embed = Embed(title="Session Log", color=Color.light_gray(), timestamp=datetime.datetime.now(datetime.timezone.utc))
             log_embed.add_field(name="Session Type", value=session_data.get("session_type", "N/A"), inline=True)
             log_embed.add_field(name="Host", value=f"{getattr(host, 'mention', 'Unknown')} ({getattr(host, 'id', 'N/A')})", inline=True)
             log_embed.add_field(name="Duration", value=duration_str, inline=True)
-            log_embed.add_field(name="Started At", value=f"<t:{start_time}:F>", inline=False)
-            log_embed.add_field(name="Ended At", value=f"<t:{end_time}:F>", inline=False)
-            # Placeholder for attendees
-            log_embed.add_field(name="Attendees", value="Attendee tracking will be added in a future update.", inline=False)
+            log_embed.add_field(name="Started At", value=f"<t:{start_time}:F>", inline=False).add_field(name="Ended At", value=f"<t:{end_time}:F>", inline=False)
+            log_embed.add_field(name="Attendees", value="Attendee tracking not yet implemented.", inline=False)
             await log_ch.send(embed=log_embed)
-        except discord.Forbidden:
-            await interaction.followup.send("⚠️ Could not send session log. Check permissions.", ephemeral=True)
-
-    # 5. Clean up active session data
+        except discord.Forbidden: await interaction.followup.send("⚠️ Could not send session log.", ephemeral=True)
     del active_sessions_data[interaction.guild_id]
     save_to_json(active_sessions_data, ERLC_ACTIVE_SESSIONS_FILE)
-
-    await interaction.response.send_message("✅ Session ended successfully.", ephemeral=True)
-
+    await interaction.response.send_message("✅ Session ended.", ephemeral=True)
 
 @session_group.command(name="info", description="Displays information about the current session.")
 async def session_info(interaction: Interaction):
     if not interaction.guild or not interaction.guild_id: return
-    
     if interaction.guild_id not in active_sessions_data:
-        await interaction.response.send_message("ℹ️ There is no active session in this server.", ephemeral=True)
-        return
-        
+        await interaction.response.send_message("ℹ️ No active session.", ephemeral=True); return
     session_data = active_sessions_data[interaction.guild_id]
     host = interaction.guild.get_member(session_data.get("host_id"))
     start_time = session_data.get("start_time")
-    
     embed = Embed(title="Active ERLC Session Information", color=Color.blue())
-    if host:
-        embed.set_author(name=f"Host: {host.display_name}", icon_url=host.display_avatar.url)
+    if host: embed.set_author(name=f"Host: {host.display_name}", icon_url=host.display_avatar.url)
     embed.add_field(name="Session Type", value=session_data.get("session_type", "N/A"), inline=False)
-    if session_data.get("description"):
-        embed.add_field(name="Description", value=session_data.get("description"), inline=False)
-    if start_time:
-        embed.add_field(name="Active Since", value=f"<t:{start_time}:F> (<t:{start_time}:R>)", inline=False)
-        
+    if session_data.get("description"): embed.add_field(name="Description", value=session_data.get("description"), inline=False)
+    if start_time: embed.add_field(name="Active Since", value=f"<t:{start_time}:F> (<t:{start_time}:R>)", inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # --- Global Error Handler ---
 async def global_app_command_error_handler(interaction: discord.Interaction, error: app_commands.AppCommandError): 
-    user_readable_error = "An unexpected error occurred. Please try again later."
-    
-    if isinstance(error, app_commands.CommandOnCooldown): 
-        user_readable_error = f"This command is on cooldown. Try again in {error.retry_after:.2f}s."
-    elif isinstance(error, app_commands.MissingPermissions): 
-        user_readable_error = f"You lack the required permissions to run this command: `{' '.join(error.missing_permissions)}`"
-    elif isinstance(error, app_commands.BotMissingPermissions): 
-        user_readable_error = f"I lack the required permissions to do this: `{' '.join(error.missing_permissions)}`"
-    elif isinstance(error, app_commands.CheckFailure): 
-        user_readable_error = str(error) # Use the custom message from our check
-    
-    cmd_name_for_log = interaction.command.qualified_name if interaction.command else "UnknownCmd"
-    print(f"ERROR (Slash Command): User: {interaction.user}, Guild: {interaction.guild_id}, Cmd: {cmd_name_for_log}, Error: {type(error).__name__} - {error}")
-    
+    user_readable_error = "An unexpected error occurred."
+    if isinstance(error, app_commands.CommandOnCooldown): user_readable_error = f"This command is on cooldown. Try again in {error.retry_after:.2f}s."
+    elif isinstance(error, app_commands.MissingPermissions): user_readable_error = f"You lack permissions: `{' '.join(error.missing_permissions)}`"
+    elif isinstance(error, app_commands.BotMissingPermissions): user_readable_error = f"I lack permissions: `{' '.join(error.missing_permissions)}`"
+    elif isinstance(error, app_commands.CheckFailure): user_readable_error = str(error)
+    print(f"ERROR: User: {interaction.user}, Guild: {interaction.guild_id}, Cmd: {interaction.command.qualified_name if interaction.command else 'N/A'}, Error: {type(error).__name__} - {error}")
     try:
-        if interaction.response.is_done(): 
-            await interaction.followup.send(f"⚠️ {user_readable_error}", ephemeral=True)
-        else: 
-            await interaction.response.send_message(f"⚠️ {user_readable_error}", ephemeral=True)
-    except Exception as e_resp: 
-        print(f"ERROR sending error response: {e_resp}")
-
+        if interaction.response.is_done(): await interaction.followup.send(f"⚠️ {user_readable_error}", ephemeral=True)
+        else: await interaction.response.send_message(f"⚠️ {user_readable_error}", ephemeral=True)
+    except Exception as e_resp: print(f"ERROR sending error response: {e_resp}")
 bot.tree.on_error = global_app_command_error_handler
 
 # --- Main Execution ---
 async def main_async():
     async with bot: 
-        # The Flask server is required for hosting on platforms like Render.
         start_keep_alive_server()
         print(f"Flask web server thread started.")
         print(f"Attempting to connect {ARVO_BOT_NAME} to Discord...")
@@ -472,12 +427,9 @@ async def main_async():
 
 if __name__ == "__main__":
     if not BOT_TOKEN:
-        print("CRITICAL: DISCORD_TOKEN environment variable is not set. The bot cannot start.")
+        print("CRITICAL: DISCORD_TOKEN environment variable is not set.")
     else:
         load_all_data() 
-        try:
-            asyncio.run(main_async())
-        except KeyboardInterrupt:
-            print(f"{ARVO_BOT_NAME} shutting down manually...")
-        except Exception as e:
-            print(f"CRITICAL BOT RUN ERROR for {ARVO_BOT_NAME}: {e}")
+        try: asyncio.run(main_async())
+        except KeyboardInterrupt: print(f"{ARVO_BOT_NAME} shutting down manually...")
+        except Exception as e: print(f"CRITICAL BOT RUN ERROR for {ARVO_BOT_NAME}: {e}")
