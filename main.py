@@ -105,12 +105,14 @@ app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
 
 @app.route('/')
-def index(): return render_template('index.html', ARVO_BOT_NAME=ARVO_BOT_NAME)
-# Other routes can be added back here later if needed
+def index(): 
+    # This basic route ensures the web service has something to respond with.
+    return f"{ARVO_BOT_NAME} is running!"
 
 def run_flask():
+  # Render dynamically assigns a port, so we use the PORT environment variable.
   port = int(os.environ.get('PORT', 8080)) 
-  app.run(host='0.0.0.0', port=port, debug=False) 
+  app.run(host='0.0.0.0', port=port) 
 
 def start_keep_alive_server(): 
     server_thread = Thread(target=run_flask)
@@ -429,9 +431,9 @@ bot.tree.on_error = global_app_command_error_handler
 # --- Main Execution ---
 async def main_async():
     async with bot: 
-        # The Flask server is not essential for the bot to run, but good for future dashboard
-        # start_keep_alive_server() 
-        print(f"Flask web server thread would start here if uncommented.")
+        # The Flask server is required for hosting on platforms like Render.
+        start_keep_alive_server()
+        print(f"Flask web server thread started.")
         print(f"Attempting to connect {ARVO_BOT_NAME} to Discord...")
         await bot.start(BOT_TOKEN)
 
