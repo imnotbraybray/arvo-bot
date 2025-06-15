@@ -144,16 +144,35 @@ bot = ArvoBot(command_prefix=commands.when_mentioned_or("!arvo-erlc-unused!"), i
 async def on_ready():
     print(f'{ARVO_BOT_NAME} has logged in as {bot.user.name} (ID: {bot.user.id})')
     print(f'Discord.py Version: {discord.__version__}')
-    # Sync commands for all guilds the bot is in for a robust update
-    for guild in bot.guilds:
-        try:
-            # Forcefully sync commands to ensure new ones appear and old ones are removed
-            await bot.tree.sync(guild=guild)
-            print(f"Commands synced successfully for guild: {guild.name} ({guild.id})")
-        except discord.errors.Forbidden as e:
-            print(f"ERROR: Lacking 'applications.commands' scope for guild: {guild.name} ({guild.id}). {e}")
-        except Exception as e:
-            print(f"ERROR: Failed to sync commands for guild {guild.name} ({guild.id}): {e}")
+    
+    # --- AGGRESSIVE COMMAND SYNC ---
+    # This is a more forceful way to clear caches and ensure commands update.
+    try:
+        print("Attempting to aggressively sync commands...")
+        # Clear commands for all guilds first
+        for guild in bot.guilds:
+            try:
+                print(f"Clearing commands for guild: {guild.name} ({guild.id})...")
+                bot.tree.clear_commands(guild=guild)
+                await bot.tree.sync(guild=guild)
+                print(f"Commands cleared for {guild.name}.")
+            except discord.errors.Forbidden:
+                print(f"Failed to clear commands for {guild.name} - Missing Permissions.")
+        
+        # Now, sync the new commands to all guilds.
+        print("Re-syncing all new commands...")
+        for guild in bot.guilds:
+            try:
+                await bot.tree.sync(guild=guild)
+                print(f"Commands synced for guild: {guild.name} ({guild.id})")
+            except discord.errors.Forbidden as e:
+                print(f"ERROR: Lacking 'applications.commands' scope for guild: {guild.name} ({guild.id}). {e}")
+            except Exception as e:
+                print(f"ERROR: Failed to sync commands for guild {guild.name} ({guild.id}): {e}")
+
+        print("Command sync process complete.")
+    except Exception as e:
+        print(f"An error occurred during the aggressive sync process: {e}")
 
     print(f'{ARVO_BOT_NAME} is ready and online!')
     await bot.change_presence(activity=discord.Game(name=f"Managing ERLC Servers"))
@@ -163,8 +182,9 @@ async def on_guild_join(guild: discord.Guild):
     print(f"INFO: Joined new guild: {guild.name} (ID: {guild.id})")
     get_guild_config(guild.id) # Ensure a config file is created on join
     try:
+        print(f"Syncing commands for new guild: {guild.name} ({guild.id})")
         await bot.tree.sync(guild=guild) # Sync commands for the new guild
-        print(f"Commands synced successfully for new guild: {guild.name} ({guild.id})")
+        print(f"Commands synced successfully for new guild.")
     except Exception as e:
         print(f"ERROR: Failed to sync commands for new guild {guild.name} ({guild.id}): {e}")
 
@@ -419,7 +439,7 @@ async def session_info(interaction: Interaction):
 async def global_app_command_error_handler(interaction: discord.Interaction, error: app_commands.AppCommandError): 
     user_readable_error = "An unexpected error occurred. Please try again later."
     
-    if isinstance(error, app_commands.CommandOnoldown): 
+    if isinstance(error, app_commands.CommandOnCooldown): 
         user_readable_error = f"This command is on cooldown. Try again in {error.retry_after:.2f}s."
     elif isinstance(error, app_commands.MissingPermissions): 
         user_readable_error = f"You lack the required permissions to run this command: `{' '.join(error.missing_permissions)}`"
