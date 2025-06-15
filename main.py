@@ -129,7 +129,7 @@ class ArvoBot(commands.Bot):
         super().__init__(*args, **kwargs)
 
     async def setup_hook(self): 
-        # Add the new ERLC command groups to the bot's command tree
+        # Add the new ERLC command groups to the bot's central command tree
         self.tree.add_command(erlc_config_group)
         self.tree.add_command(session_group)
         
@@ -144,9 +144,17 @@ bot = ArvoBot(command_prefix=commands.when_mentioned_or("!arvo-erlc-unused!"), i
 async def on_ready():
     print(f'{ARVO_BOT_NAME} has logged in as {bot.user.name} (ID: {bot.user.id})')
     print(f'Discord.py Version: {discord.__version__}')
-    # Sync commands for all guilds the bot is in
+    # Sync commands for all guilds the bot is in for a robust update
     for guild in bot.guilds:
-        await bot.tree.sync(guild=guild)
+        try:
+            # Forcefully sync commands to ensure new ones appear and old ones are removed
+            await bot.tree.sync(guild=guild)
+            print(f"Commands synced successfully for guild: {guild.name} ({guild.id})")
+        except discord.errors.Forbidden as e:
+            print(f"ERROR: Lacking 'applications.commands' scope for guild: {guild.name} ({guild.id}). {e}")
+        except Exception as e:
+            print(f"ERROR: Failed to sync commands for guild {guild.name} ({guild.id}): {e}")
+
     print(f'{ARVO_BOT_NAME} is ready and online!')
     await bot.change_presence(activity=discord.Game(name=f"Managing ERLC Servers"))
 
@@ -154,7 +162,12 @@ async def on_ready():
 async def on_guild_join(guild: discord.Guild):
     print(f"INFO: Joined new guild: {guild.name} (ID: {guild.id})")
     get_guild_config(guild.id) # Ensure a config file is created on join
-    await bot.tree.sync(guild=guild) # Sync commands for the new guild
+    try:
+        await bot.tree.sync(guild=guild) # Sync commands for the new guild
+        print(f"Commands synced successfully for new guild: {guild.name} ({guild.id})")
+    except Exception as e:
+        print(f"ERROR: Failed to sync commands for new guild {guild.name} ({guild.id}): {e}")
+
     
 # --- Modals for Configuration ---
 class ApiKeyModal(Modal, title="Set Guild API Key"):
@@ -406,7 +419,7 @@ async def session_info(interaction: Interaction):
 async def global_app_command_error_handler(interaction: discord.Interaction, error: app_commands.AppCommandError): 
     user_readable_error = "An unexpected error occurred. Please try again later."
     
-    if isinstance(error, app_commands.CommandOnCooldown): 
+    if isinstance(error, app_commands.CommandOnoldown): 
         user_readable_error = f"This command is on cooldown. Try again in {error.retry_after:.2f}s."
     elif isinstance(error, app_commands.MissingPermissions): 
         user_readable_error = f"You lack the required permissions to run this command: `{' '.join(error.missing_permissions)}`"
