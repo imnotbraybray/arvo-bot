@@ -11,7 +11,7 @@ import time # Using time module for Unix timestamps
 import uuid 
 import requests
 import json 
-import asyncio
+import asynciow
 from typing import Optional, List, Dict, Any, Union
 
 # --- Arvo Bot Information ---
@@ -198,13 +198,12 @@ def is_session_host():
     return app_commands.check(predicate)
 
 # --- ERLC Config Group Commands ---
-@erlc_config_group.command(name="set", description="Set a configuration value for the ERLC bot.")
-@app_commands.checks.has_permissions(administrator=True)
-class ERLCConfigSet(app_commands.Group):
-    # This is a subcommand group
-    pass
 
-@ERLCConfigSet.command(name="channels", description="Set the channels for ERLC announcements and logs.")
+# Define a subcommand group 'set' under the parent 'erlc_config_group'
+config_set_group = app_commands.Group(name="set", description="Set a configuration value for the ERLC bot.", parent=erlc_config_group)
+
+@config_set_group.command(name="channels", description="Set the channels for ERLC announcements and logs.")
+@app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
     announcements_channel="Channel for session start/end announcements.",
     logs_channel="Channel for detailed session logs (e.g., who attended)."
@@ -220,7 +219,8 @@ async def set_channels(interaction: discord.Interaction, announcements_channel: 
     embed.add_field(name="Logs Channel", value=logs_channel.mention, inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@ERLCConfigSet.command(name="roles", description="Set the roles for ERLC permissions.")
+@config_set_group.command(name="roles", description="Set the roles for ERLC permissions.")
+@app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(session_host_role="Role required to start/end ERLC sessions.")
 async def set_roles(interaction: discord.Interaction, session_host_role: discord.Role):
     if not interaction.guild_id: return
@@ -231,9 +231,11 @@ async def set_roles(interaction: discord.Interaction, session_host_role: discord
     embed.add_field(name="Session Host Role", value=session_host_role.mention, inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@ERLCConfigSet.command(name="api-key", description="Securely set the API key for this guild.")
-async def set_api_key(self, interaction: discord.Interaction):
+@config_set_group.command(name="api-key", description="Securely set the API key for this guild.")
+@app_commands.checks.has_permissions(administrator=True)
+async def set_api_key(interaction: discord.Interaction):
     await interaction.response.send_modal(ApiKeyModal())
+
 
 @erlc_config_group.command(name="view", description="View the current ERLC configuration for this server.")
 @app_commands.checks.has_permissions(administrator=True)
@@ -444,4 +446,3 @@ if __name__ == "__main__":
             print(f"{ARVO_BOT_NAME} shutting down manually...")
         except Exception as e:
             print(f"CRITICAL BOT RUN ERROR for {ARVO_BOT_NAME}: {e}")
-
